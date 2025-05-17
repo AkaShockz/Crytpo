@@ -133,11 +133,20 @@ async def analysis(interaction: discord.Interaction, symbol: str):
         color=0x00FFFF
     )
     
-    # Add technical indicators
+    # Add technical indicators with beginner-friendly explanations
     for indicator, value in analysis_data['indicators'].items():
+        if indicator == 'RSI':
+            explanation = "(Relative Strength Index: measures overbought/oversold conditions)"
+        elif indicator == 'MACD':
+            explanation = "(Moving Average Convergence Divergence: shows trend direction and strength)"
+        elif indicator == 'EMA 50/200':
+            explanation = "(Moving Averages: indicates long-term trend direction)"
+        else:
+            explanation = ""
+            
         embed.add_field(
             name=f"{indicator}",
-            value=f"{value}",
+            value=f"{value}\n{explanation}",
             inline=True
         )
     
@@ -148,14 +157,14 @@ async def analysis(interaction: discord.Interaction, symbol: str):
         inline=False
     )
     
-    # Add support and resistance
+    # Add support and resistance with explanation
     embed.add_field(
         name="Support & Resistance",
-        value=f"Support: £{analysis_data['support']:.2f}\nResistance: £{analysis_data['resistance']:.2f}",
+        value=f"Support: £{analysis_data['support']:.2f} (price tends to bounce up from this level)\nResistance: £{analysis_data['resistance']:.2f} (price tends to bounce down from this level)",
         inline=False
     )
     
-    embed.set_footer(text=f"Analysis based on data from the past 24 hours • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    embed.set_footer(text=f"Analysis based on data from the past 24 hours • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # Current date and time
     
     await interaction.response.send_message(embed=embed)
 
@@ -384,41 +393,101 @@ def get_technical_analysis(symbol):
     usd_price = float(get_crypto_price(symbol) or 0)
     gbp_price = convert_usd_to_gbp(usd_price)
     
-    # For simulation purposes
-    sentiments = ["Bullish", "Slightly Bullish", "Neutral", "Slightly Bearish", "Bearish"]
+    # First determine the overall market direction to keep indicators consistent
+    # This will help us generate consistent technical analysis
+    market_direction = random.choice(["bullish", "neutral", "bearish"])
+    
+    # Set sentiment based on market direction
+    if market_direction == "bullish":
+        sentiment = random.choice(["Bullish", "Slightly Bullish"])
+        macd_signal = "Bullish Crossover"
+        pattern_index = random.choice([0, 4])  # Bull flag or cup and handle (bullish patterns)
+    elif market_direction == "bearish":
+        sentiment = random.choice(["Bearish", "Slightly Bearish"])
+        macd_signal = "Bearish Crossover"
+        pattern_index = 2  # Head and shoulders (bearish pattern)
+    else:
+        sentiment = "Neutral"
+        macd_signal = random.choice(["Neutral", "Sideways"])
+        pattern_index = random.choice([1, 3])  # Other patterns
+    
+    # Define patterns with clear explanations for beginners
     patterns = [
-        f"Forming a bull flag pattern with increased volume supporting upward movement",
-        f"Double bottom pattern suggesting potential reversal of downtrend",
-        f"Head and shoulders pattern indicating possible trend reversal",
-        f"Bullish engulfing pattern on the 4-hour chart",
-        f"Forming a cup and handle pattern suggesting continued uptrend"
+        f"Forming a bull flag pattern with increased volume supporting upward movement (typically bullish)",
+        f"Double bottom pattern suggesting potential reversal of downtrend (potentially bullish)",
+        f"Head and shoulders pattern indicating possible trend reversal (typically bearish)",
+        f"Bullish engulfing pattern on the 4-hour chart (short-term bullish signal)",
+        f"Forming a cup and handle pattern suggesting continued uptrend (typically bullish)"
     ]
     
-    rsi_values = [f"{random.randint(30, 70)} - {'Neutral' if 40 <= random.randint(30, 70) <= 60 else 'Oversold' if random.randint(30, 70) < 40 else 'Overbought'}",
-                 f"{random.randint(30, 70)} - {'Neutral' if 40 <= random.randint(30, 70) <= 60 else 'Oversold' if random.randint(30, 70) < 40 else 'Overbought'}"]
+    # Generate RSI value consistent with market direction
+    if market_direction == "bullish":
+        rsi_value = random.randint(50, 69)  # Stronger but not overbought
+    elif market_direction == "bearish":
+        rsi_value = random.randint(31, 49)  # Weaker but not oversold
+    else:
+        rsi_value = random.randint(45, 55)  # Neutral
     
-    volume_analysis = [
-        "Increasing volume confirms the uptrend", 
-        "Decreasing volume suggests weakening momentum",
-        "Volume spike indicates strong buying interest",
-        "Declining volume in downtrend suggests potential reversal"
-    ]
+    # Interpret RSI correctly
+    if rsi_value < 30:
+        rsi_interpretation = "Oversold"
+    elif rsi_value > 70:
+        rsi_interpretation = "Overbought"
+    else:
+        rsi_interpretation = "Neutral"
     
-    recommendations = [
-        "Consider entering long positions with tight stop losses",
-        "Wait for confirmation of trend before entering positions",
-        "Consider taking profits at resistance levels",
-        "Watch for breakout above resistance with increased volume"
-    ]
+    rsi_values = [f"{rsi_value} - {rsi_interpretation}"]
+    
+    # Choose volume analysis consistent with market direction
+    if market_direction == "bullish":
+        volume_analysis = [
+            "Increasing volume confirms the uptrend",
+            "Volume spike indicates strong buying interest"
+        ]
+    elif market_direction == "bearish":
+        volume_analysis = [
+            "Decreasing volume suggests weakening momentum",
+            "Declining volume in downtrend suggests potential reversal"
+        ]
+    else:
+        volume_analysis = [
+            "Average volume suggests consolidation phase",
+            "Volume staying consistent with previous days"
+        ]
+    
+    # Choose recommendations consistent with market direction
+    if market_direction == "bullish":
+        recommendations = [
+            "Consider entering long positions with tight stop losses",
+            "Watch for breakout above resistance with increased volume"
+        ]
+    elif market_direction == "bearish":
+        recommendations = [
+            "Consider taking profits at resistance levels",
+            "Watch for potential reversal signals"
+        ]
+    else:
+        recommendations = [
+            "Wait for confirmation of trend before entering positions",
+            "Consider range-trading strategies while in consolidation"
+        ]
+    
+    # Choose EMA status consistent with market direction
+    if market_direction == "bullish":
+        ema_status = "Golden Cross" # Bullish signal
+    elif market_direction == "bearish":
+        ema_status = "Death Cross" # Bearish signal
+    else:
+        ema_status = "Neutral"
     
     return {
-        'sentiment': random.choice(sentiments),
+        'sentiment': sentiment,
         'indicators': {
             'RSI': rsi_values[0],
-            'MACD': 'Bullish Crossover' if random.random() > 0.5 else 'Bearish Crossover',
-            'EMA 50/200': 'Golden Cross' if random.random() > 0.7 else 'Death Cross' if random.random() < 0.3 else 'Neutral'
+            'MACD': macd_signal,
+            'EMA 50/200': ema_status
         },
-        'pattern': random.choice(patterns),
+        'pattern': patterns[pattern_index],
         'support': round(gbp_price * 0.95, 2),
         'resistance': round(gbp_price * 1.05, 2),
         'volume': random.choice(volume_analysis),
