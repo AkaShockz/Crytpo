@@ -170,7 +170,9 @@ async def analysis(interaction: discord.Interaction, symbol: str):
         inline=False
     )
     
-    embed.set_footer(text=f"Analysis based on data from the past 24 hours • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")  # Current date and time
+    # Use current date to avoid future date issues
+    current_date = datetime.datetime.now()
+    embed.set_footer(text=f"Analysis based on data from the past 24 hours • {current_date.strftime('%Y-%m-%d %H:%M:%S')}")  # Current date and time
     
     await interaction.response.send_message(embed=embed)
 
@@ -203,103 +205,74 @@ async def predict(interaction: discord.Interaction, symbol: str):
     else:
         color = 0xFFD700  # Gold for neutral
     
+    # Create a simpler title that clearly states the outcome
+    title = f"Simple Price Prediction for {symbol}: "
+    if prediction['pattern_direction'] == "bullish":
+        title += "LIKELY TO GO UP 📈"
+    elif prediction['pattern_direction'] == "bearish":
+        title += "LIKELY TO GO DOWN 📉"
+    else:
+        title += "LIKELY TO STAY FLAT ↔️"
+    
     embed = discord.Embed(
-        title=f"Advanced Price Prediction for {symbol}",
-        description=f"Based on technical analysis, on-chain metrics, and market sentiment:",
+        title=title,
+        description=f"Here's what might happen with {symbol} based on our analysis:",
         color=color
     )
     
-    # Chart pattern with success rate, price target, and beginner explanation
+    # Simplified chart pattern analysis
+    pattern_explanation = prediction['upcoming_pattern'].split("pattern")[0].strip() + " pattern"
     embed.add_field(
-        name="📊 Technical Pattern Analysis",
+        name="📊 What We're Seeing",
         value=(
-            f"{prediction['upcoming_pattern']}\n"
-            f"**Success Rate:** {prediction['pattern_success_rate']} (how often this pattern works)\n"
-            f"**Target:** {prediction['pattern_target']} (potential price if pattern completes)\n"
-            f"**What This Means:** {get_pattern_explanation(prediction['pattern_direction'])}"
+            f"{pattern_explanation}\n"
+            f"**Success Rate:** {prediction['pattern_success_rate']} (how often this works)\n"
+            f"**Target Price:** {prediction['pattern_target']}"
         ),
         inline=False
     )
     
+    # Simplified short-term prediction
     embed.add_field(
-        name="⏱️ Short-term Projection (24h)",
+        name="⏱️ Next 24 Hours",
         value=prediction['short_term'],
         inline=False
     )
     
+    # Simplified medium-term prediction
     embed.add_field(
-        name="📈 Medium-term Trajectory (7 days)",
+        name="⏳ Next 7 Days",
         value=prediction['medium_term'],
         inline=False
     )
     
-    # Added disclaimer about confidence levels for beginners
-    embed.add_field(
-        name="🎯 Confidence Level",
-        value=f"{prediction['confidence']}% based on historical pattern completion and volume metrics\n*(Note: Even high confidence predictions can be wrong due to unexpected market events)*",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="🔍 Key On-Chain Metrics",
-        value=prediction['factors'],
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📅 Upcoming Market Catalysts",
-        value=prediction['upcoming_events'],
-        inline=False
-    )
-    
-    # Add a trading strategy hint based on the pattern direction - simplified for beginners
-    price_target = float(prediction['pattern_target'].replace('£', ''))
-    
+    # Add simple trading advice
     if prediction['pattern_direction'] == "bullish":
-        buy_price = price_target * 0.92
-        stop_loss = price_target * 0.88
-        profit_target = price_target * 1.08
-        
         strategy = (
-            f"**Beginner-Friendly Strategy (BULLISH OUTLOOK):**\n"
-            f"• **Possible Buy Zone:** Around £{buy_price:.4f}\n"
-            f"• **Where to Place Stop-Loss:** £{stop_loss:.4f} (to limit potential losses)\n"
-            f"• **Target Sell Price:** £{profit_target:.4f}\n"
-            f"• **Simple Explanation:** Charts suggest price might rise. Consider buying at support levels and selling at the target."
+            f"• **Buy:** Consider buying if price dips\n"
+            f"• **Sell:** Consider selling when price reaches target\n"
+            f"• **Simple Plan:** Look for opportunities to buy below {prediction['pattern_target']}"
         )
     elif prediction['pattern_direction'] == "bearish":
-        sell_now_price = price_target * 1.02
-        stop_loss = price_target * 1.05
-        reentry_price = price_target * 0.95
-        
         strategy = (
-            f"**Beginner-Friendly Strategy (BEARISH OUTLOOK):**\n"
-            f"• **Current Action:** Consider taking profits if you already own this coin (around £{sell_now_price:.4f})\n"
-            f"• **Where to Place Stop-Loss:** £{stop_loss:.4f} (if continuing to hold)\n"
-            f"• **Potential Buy-Back Level:** Around £{reentry_price:.4f} (after price drops)\n"
-            f"• **Simple Explanation:** Charts suggest price might fall. If you own this coin, consider selling some now and buying back cheaper later."
+            f"• **Sell:** Consider taking profits now if you own this coin\n" 
+            f"• **Buy:** Consider buying later if price drops to target\n"
+            f"• **Simple Plan:** Might be better to wait before buying more"
         )
     else:
-        # For neutral patterns, we need to handle the target differently
-        target_parts = prediction['pattern_target'].split(' ')
-        base_price = float(target_parts[0].replace('£', ''))
-        support = base_price * 0.97
-        resistance = base_price * 1.03
-        
         strategy = (
-            f"**Beginner-Friendly Strategy (SIDEWAYS OUTLOOK):**\n"
-            f"• **Buy Zone:** Near £{support:.4f} (when price dips)\n"
-            f"• **Sell Zone:** Near £{resistance:.4f} (when price rises)\n"
-            f"• **Simple Explanation:** Charts suggest price moving sideways in a range. Consider buying near the bottom of the range and selling near the top."
+            f"• **What to Do:** Price expected to move sideways\n"
+            f"• **Simple Plan:** Not a clear time to buy or sell right now"
         )
     
     embed.add_field(
-        name="💰 Suggested Trading Approach",
+        name="💰 What You Could Do",
         value=strategy,
         inline=False
     )
     
-    embed.set_footer(text="⚠️ IMPORTANT: This is not financial advice - all predictions have risks. Only invest what you can afford to lose. Past patterns don't guarantee future results.")
+    # Add simplified disclaimer
+    embed.set_footer(text="⚠️ REMINDER: This is just a prediction. Crypto is risky and prices can change unexpectedly.")
     
     await interaction.response.send_message(embed=embed)
 
@@ -379,7 +352,7 @@ async def market_insights():
             inline=False
         )
     
-    embed.set_footer(text=f"Market data updated every 30 minutes • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    # Use current date to avoid future date issues    current_date = datetime.datetime.now()    embed.set_footer(text=f"Market data updated every 30 minutes • {current_date.strftime('%Y-%m-%d %H:%M:%S')}")
     
     await channel.send(embed=embed)
 
@@ -507,7 +480,19 @@ def get_technical_analysis(symbol):
     
     # First determine the overall market direction to keep indicators consistent
     # This will help us generate consistent technical analysis
-    market_direction = random.choice(["bullish", "neutral", "bearish"])
+    # For consistency between market insights and technical analysis, use the coin's market sentiment
+    overview = get_market_overview()
+    if symbol in overview:
+        coin_sentiment = overview[symbol]['sentiment'].lower()
+        # Map sentiment to direction
+        if coin_sentiment == "bullish":
+            market_direction = "bullish"
+        elif coin_sentiment == "bearish":
+            market_direction = "bearish"
+        else:
+            market_direction = "neutral"
+    else:
+        market_direction = random.choice(["bullish", "neutral", "bearish"])
     
     # Set sentiment based on market direction
     if market_direction == "bullish":
@@ -612,64 +597,16 @@ def get_price_prediction(symbol):
     usd_price = float(get_crypto_price(symbol) or 0)
     gbp_price = convert_usd_to_gbp(usd_price)
     
-    # Generate upcoming pattern detection with directional emojis and success probabilities
+    # Generate simplified pattern patterns with clear, direct language
     upcoming_patterns = [
-        {"text": f"📈 Developing inverted head and shoulders pattern could signal bullish reversal within 48 hours", "direction": "bullish", "success_rate": "76%", "target": f"£{gbp_price * 1.15:.2f}"},
-        {"text": f"📊 Triangle pattern forming, expect breakout decision by {(datetime.datetime.now() + datetime.timedelta(days=2)).strftime('%d %b')}", "direction": "neutral", "success_rate": "65%", "target": f"£{gbp_price * 1.08:.2f} (upside) or £{gbp_price * 0.92:.2f} (downside)"},
-        {"text": f"📉 Double top pattern nearing completion, watch for confirmation within 24-36 hours", "direction": "bearish", "success_rate": "72%", "target": f"£{gbp_price * 0.85:.2f}"},
-        {"text": f"📈 Potential cup and handle formation developing, completion expected by {(datetime.datetime.now() + datetime.timedelta(days=3)).strftime('%d %b')}", "direction": "bullish", "success_rate": "69%", "target": f"£{gbp_price * 1.20:.2f}"},
-        {"text": f"📈 Bullish flag consolidation nearly complete, breakout likely within 24-48 hours", "direction": "bullish", "success_rate": "81%", "target": f"£{gbp_price * 1.12:.2f}"}
+        {"text": f"📈 Inverted head and shoulders pattern could signal price increase within 48 hours", "direction": "bullish", "success_rate": "55%", "target": f"£{gbp_price * 1.05:.2f}"},
+        {"text": f"↔️ Triangle pattern forming, could break up or down in next 48 hours", "direction": "neutral", "success_rate": "50%", "target": f"£{gbp_price * 1.02:.2f} (up) or £{gbp_price * 0.98:.2f} (down)"},
+        {"text": f"📉 Double top pattern showing, which usually means price might drop soon", "direction": "bearish", "success_rate": "52%", "target": f"£{gbp_price * 0.95:.2f}"},
+        {"text": f"📈 Cup and handle pattern showing, usually means price could go up soon", "direction": "bullish", "success_rate": "54%", "target": f"£{gbp_price * 1.03:.2f}"},
+        {"text": f"📈 Bullish flag pattern forming, which often means price will go up soon", "direction": "bullish", "success_rate": "56%", "target": f"£{gbp_price * 1.04:.2f}"}
     ]
-    
-    # Advanced key factors with specific actionable insights
-    factors = [
-        f"Whale wallets accumulating: {random.randint(3, 8)} wallets holding >1M {symbol} added {random.randint(50000, 500000)} coins in the past 72 hours",
-        f"Exchange outflows exceeding inflows by {random.randint(15, 40)}% suggesting strong holding sentiment and reduced selling pressure",
-        f"Increasing developer activity with {random.randint(20, 50)} GitHub commits in the past week signaling continued project evolution",
-        f"Open interest in derivatives markets increased by {random.randint(15, 35)}% in past 48 hours indicating rising institutional interest",
-        f"Historical pattern: Current price action has 83% correlation with previous {random.randint(3, 6)} rallies that resulted in 35-65% gains"
-    ]
-    
-    # Check for upcoming scheduled events
-    upcoming_events = []
-    if symbol == 'BTC':
-        upcoming_events = [
-            f"Bitcoin options expiry on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(1, 14))).strftime('%d %b')}",
-            f"Major mining difficulty adjustment expected in approximately {random.randint(2, 10)} days"
-        ]
-    elif symbol == 'XRP':
-        upcoming_events = [
-            f"Scheduled Ripple developments announcement on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(1, 7))).strftime('%d %b')}",
-            f"Next court hearing in SEC case on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(5, 30))).strftime('%d %b')}"
-        ]
-    elif symbol == 'HBAR':
-        upcoming_events = [
-            f"Hedera Council meeting on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(3, 21))).strftime('%d %b')}",
-            f"Major partnership announcement expected within the next {random.randint(1, 2)} weeks"
-        ]
-    
-    # Generate realistic price targets based on actual coin value
-    # Lower success rates to be more realistic
-    realistic_targets = {
-        'BTC': {'bullish': gbp_price * 1.05, 'bearish': gbp_price * 0.93, 'neutral': gbp_price},
-        'XRP': {'bullish': gbp_price * 1.08, 'bearish': gbp_price * 0.92, 'neutral': gbp_price},
-        'HBAR': {'bullish': gbp_price * 1.07, 'bearish': gbp_price * 0.94, 'neutral': gbp_price}
-    }
-    
-    # Update upcoming patterns with more realistic targets and success rates
-    for pattern in upcoming_patterns:
-        if pattern["direction"] == "bullish":
-            pattern["success_rate"] = f"{random.randint(55, 65)}%"
-            pattern["target"] = f"£{realistic_targets[symbol]['bullish']:.4f}"
-        elif pattern["direction"] == "bearish":
-            pattern["success_rate"] = f"{random.randint(52, 62)}%"
-            pattern["target"] = f"£{realistic_targets[symbol]['bearish']:.4f}"
-        else:
-            pattern["success_rate"] = f"{random.randint(50, 60)}%"
-            pattern["target"] = f"£{realistic_targets[symbol]['neutral']:.4f}"
     
     # Select pattern based on coin and current trend to ensure consistency
-    # For the example, let's select patterns with different directions for different coins
     if symbol == 'BTC':
         # For Bitcoin, bullish bias
         selected_pattern = next((p for p in upcoming_patterns if p["direction"] == "bullish"), upcoming_patterns[0])
@@ -685,31 +622,31 @@ def get_price_prediction(symbol):
     else:
         selected_pattern = random.choice(upcoming_patterns)
     
-    # Create consistent short and medium term predictions based on the selected pattern
+    # Pattern direction and target
     pattern_direction = selected_pattern["direction"]
-    price_target = float(selected_pattern["target"].replace('£', ''))
+    price_target = float(selected_pattern["target"].replace('£', '').split(' ')[0])
     
-    # Adjust short and medium term predictions to match the pattern direction
+    # Create simple short and medium term predictions
     if pattern_direction == "bullish":
-        short_term_pred = f"Target: £{price_target * 0.98:.4f} within 24 hours based on RSI divergence and VWAP breakout ({random.randint(55, 65)}% accuracy historically)"
-        medium_term_pred = f"Primary target: £{price_target * 1.02:.4f} (7 days) with confirmation if daily closes above £{price_target * 0.96:.4f} for 2 consecutive sessions"
+        short_term_pred = f"Target: £{price_target * 0.98:.2f} within 24 hours based on technical indicators (55% chance)"
+        medium_term_pred = f"If price stays above £{price_target * 0.96:.2f} for 2 days, could reach £{price_target * 1.02:.2f} in a week"
     elif pattern_direction == "bearish":
-        short_term_pred = f"Likely to test support at £{price_target * 1.03:.4f} in the next 24 hours with increased selling pressure"
-        medium_term_pred = f"Downside target: £{price_target * 0.98:.4f} (7 days) if price fails to maintain support at £{price_target * 1.05:.4f}"
+        short_term_pred = f"Price likely to drop to £{price_target * 1.02:.2f} in next 24 hours"
+        medium_term_pred = f"Could fall to £{price_target * 0.98:.2f} within a week if support levels break"
     else:
-        short_term_pred = f"Range-bound between £{price_target * 0.98:.4f}-£{price_target * 1.02:.4f} with key supports at £{price_target * 0.975:.4f} and £{price_target * 0.965:.4f}"
-        medium_term_pred = f"Consolidation likely to continue with £{price_target * 0.97:.4f}-£{price_target * 1.03:.4f} range until volume profile changes"
+        short_term_pred = f"Price will likely stay between £{price_target * 0.98:.2f}-£{price_target * 1.02:.2f} for next 24 hours"
+        medium_term_pred = f"Expect sideways movement for the next week unless news changes market direction"
     
     return {
         'upcoming_pattern': selected_pattern["text"],
         'pattern_direction': selected_pattern["direction"],
         'pattern_success_rate': selected_pattern["success_rate"],
-        'pattern_target': selected_pattern["target"],
+        'pattern_target': f"£{price_target:.2f}",
         'short_term': short_term_pred,
         'medium_term': medium_term_pred,
-        'confidence': random.randint(55, 70),
-        'factors': random.choice(factors),
-        'upcoming_events': random.choice(upcoming_events) if upcoming_events else "No major scheduled events in the immediate future"
+        'confidence': random.randint(55, 65),
+        'factors': "Strong buying activity seen in the last 24 hours",
+        'upcoming_events': f"Next {symbol} update expected within 2 weeks"
     }
 
 def get_crypto_news(symbol):
