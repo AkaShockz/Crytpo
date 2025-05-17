@@ -7,6 +7,10 @@ import datetime
 import time
 import json
 import random
+import aiohttp
+import re
+from datetime import timedelta
+import asyncio
 
 # --- CONFIG ---
 TOKEN = os.getenv('DISCORD_BOT_TOKEN', 'YOUR_DISCORD_BOT_TOKEN')  # Replace with your bot token or set as env var
@@ -27,6 +31,30 @@ technical_terms = {
 
 # Default USD to GBP conversion rate as fallback
 USD_TO_GBP_RATE = 0.78
+
+# High-impact entities that can move markets
+MARKET_MOVERS = [
+    'SEC', 'Biden', 'Trump', 'Powell', 'Federal Reserve', 'Fed', 
+    'BlackRock', 'Fidelity', 'Grayscale', 'Ripple', 'Hedera', 
+    'ETF', 'CBDC', 'regulation', 'lawsuit', 'settlement',
+    'hack', 'security breach', 'Binance', 'Coinbase', 'Kraken',
+    'whale', 'liquidation', 'delisting', 'listing', 'partnership'
+]
+
+# News sources to monitor
+NEWS_SOURCES = [
+    'https://cryptonews.com/',
+    'https://cointelegraph.com/',
+    'https://www.coindesk.com/',
+    'https://bitcoin.com/news/',
+    'https://decrypt.co/'
+]
+
+# Twitter/X accounts to monitor
+TWITTER_ACCOUNTS = [
+    'elonmusk', 'saylor', 'cz_binance', 'VitalikButerin', 'brian_armstrong',
+    'haydenzadams', 'APompliano', 'SBF_FTX', 'tyler', 'garyvee'
+]
 
 # Market state dictionary to ensure consistent predictions across all bot functions
 # The state is determined based on real market data (price changes, volume)
@@ -224,6 +252,7 @@ async def on_ready():
     market_insights.start()
     technical_analysis.start()
     major_news_alerts.start()
+    monitor_breaking_news.start()
     
     # Sync slash commands if not already synced
     try:
@@ -637,6 +666,246 @@ async def major_news_alerts():
         embed.set_footer(text=f"Breaking news alert • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         
         await channel.send("@here", embed=embed)
+
+@tasks.loop(seconds=180)
+async def monitor_breaking_news():
+    """Monitor for breaking news that could impact crypto prices and send immediate alerts"""
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel is None:
+        print(f"Channel with ID {CHANNEL_ID} not found!")
+        return
+    
+    try:
+        # Check for breaking news using various sources
+        breaking_news = await scan_for_breaking_news()
+        
+        if breaking_news:
+            # Format as urgent alert with impact assessment
+            embed = discord.Embed(
+                title=f"🚨 URGENT MARKET ALERT: {breaking_news['title']}",
+                description=breaking_news['summary'],
+                color=0xFF0000  # Red for urgency
+            )
+            
+            # Add potential price impact analysis
+            embed.add_field(
+                name="Potential Market Impact",
+                value=breaking_news['impact_analysis'],
+                inline=False
+            )
+            
+            # Add affected coins
+            embed.add_field(
+                name="Potentially Affected Coins",
+                value=", ".join(breaking_news['affected_coins']),
+                inline=False
+            )
+            
+            # Add source with timestamp
+            embed.add_field(
+                name="Source",
+                value=f"[{breaking_news['source_name']}]({breaking_news['source_url']})",
+                inline=False
+            )
+            
+            # Add advice on what to do now
+            if breaking_news['sentiment'] > 0.2:
+                action_advice = "Consider taking advantage of potential upward price movement."
+            elif breaking_news['sentiment'] < -0.2:
+                action_advice = "Consider protecting your position to minimize potential losses."
+            else:
+                action_advice = "Monitor the situation closely as market impact is still developing."
+                
+            embed.add_field(
+                name="Suggested Action",
+                value=action_advice,
+                inline=False
+            )
+            
+            embed.set_footer(text=f"Breaking news detected at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} • Sentiment: {breaking_news['sentiment_text']}")
+            
+            # Send as @here message for visibility
+            await channel.send("@here **BREAKING MARKET NEWS ALERT!**", embed=embed)
+    
+    except Exception as e:
+        print(f"Error in news monitoring: {e}")
+
+async def scan_for_breaking_news():
+    """Scan various sources for breaking crypto news with market impact"""
+    # Last checked timestamps for different sources (to avoid duplicates)
+    last_checked = getattr(scan_for_breaking_news, 'last_checked', {})
+    last_news_hash = getattr(scan_for_breaking_news, 'last_news_hash', '')
+    
+    # Store the timestamps and hash as function attributes for persistence
+    scan_for_breaking_news.last_checked = last_checked
+    
+    # Get current time
+    now = datetime.datetime.now()
+    
+    # Initialize aiohttp session
+    async with aiohttp.ClientSession() as session:
+        # Check crypto news websites
+        for source_url in NEWS_SOURCES:
+            # Avoid checking same source too frequently
+            if source_url in last_checked and now - last_checked[source_url] < timedelta(minutes=10):
+                continue
+                
+            try:
+                async with session.get(source_url, timeout=10) as response:
+                    if response.status == 200:
+                        html_content = await response.text()
+                        
+                        # Very basic scraping - would need more sophisticated parsing in production
+                        # For each news site, you'd ideally have specific parsing rules
+                        
+                        # Look for headlines with market-moving keywords
+                        for entity in MARKET_MOVERS:
+                            # Case insensitive search
+                            pattern = re.compile(f"<h\\d[^>]*>.*({entity}).*?</h\\d>", re.IGNORECASE)
+                            headlines = pattern.findall(html_content)
+                            
+                            if headlines:
+                                for headline in headlines:
+                                    # Clean up the headline
+                                    clean_headline = re.sub('<.*?>', '', headline)
+                                    
+                                    # Create a hash of the headline to avoid duplicates
+                                    headline_hash = hash(clean_headline)
+                                    if headline_hash == last_news_hash:
+                                        continue  # Skip if we've seen this before
+                                    
+                                    # Store this headline hash to avoid duplicates
+                                    scan_for_breaking_news.last_news_hash = headline_hash
+                                    
+                                    # Analyze headline for coins and sentiment
+                                    affected_coins = []
+                                    for coin in SUPPORTED_COINS:
+                                        if coin in clean_headline or coin.lower() in clean_headline:
+                                            affected_coins.append(coin)
+                                    
+                                    # If no specific coins mentioned, it might affect the whole market
+                                    if not affected_coins:
+                                        affected_coins = SUPPORTED_COINS
+                                        
+                                    # Very basic sentiment analysis (would use more sophisticated NLP in production)
+                                    sentiment_score = calculate_news_sentiment(clean_headline)
+                                    sentiment_text = get_sentiment_text(sentiment_score)
+                                    
+                                    # Generate impact analysis based on the headline and sentiment
+                                    impact_analysis = generate_impact_analysis(clean_headline, entity, sentiment_score)
+                                    
+                                    # Build the news object
+                                    breaking_news = {
+                                        'title': clean_headline,
+                                        'summary': f"Breaking news related to {entity.upper()} that could impact crypto markets.",
+                                        'impact_analysis': impact_analysis,
+                                        'affected_coins': affected_coins,
+                                        'source_name': source_url.split('//')[1].split('/')[0],
+                                        'source_url': source_url,
+                                        'sentiment': sentiment_score,
+                                        'sentiment_text': sentiment_text
+                                    }
+                                    
+                                    # Record that we've checked this source
+                                    last_checked[source_url] = now
+                                    
+                                    return breaking_news
+                        
+                        # Record that we've checked this source
+                        last_checked[source_url] = now
+            
+            except Exception as e:
+                print(f"Error checking {source_url}: {e}")
+                # Record that we've checked this source even if it failed
+                last_checked[source_url] = now
+        
+        # No breaking news found
+        return None
+
+def calculate_news_sentiment(headline):
+    """Calculate sentiment score from headline text (-1 to +1 scale)"""
+    # In a production system, you'd use a proper NLP library or API
+    # This is a simple keyword-based approach
+    
+    positive_words = ['bullish', 'surge', 'rally', 'gain', 'positive', 'launch', 'adopt', 
+                      'approval', 'support', 'partnership', 'invest', 'buy', 'victory', 'win']
+    
+    negative_words = ['bearish', 'crash', 'drop', 'decline', 'ban', 'regulation', 'fraud', 
+                      'hack', 'security', 'lawsuit', 'investigation', 'sell', 'dump', 'lose']
+    
+    # Normalize text
+    text = headline.lower()
+    
+    # Count positive and negative words
+    pos_count = sum(1 for word in positive_words if word in text)
+    neg_count = sum(1 for word in negative_words if word in text)
+    
+    # If no sentiment words found
+    if pos_count + neg_count == 0:
+        return 0
+        
+    # Calculate sentiment (-1 to +1)
+    return (pos_count - neg_count) / (pos_count + neg_count)
+
+def get_sentiment_text(sentiment_score):
+    """Convert sentiment score to text description"""
+    if sentiment_score > 0.6:
+        return "Very Positive 🔥"
+    elif sentiment_score > 0.2:
+        return "Positive 📈"
+    elif sentiment_score > -0.2:
+        return "Neutral ↔️"
+    elif sentiment_score > -0.6:
+        return "Negative 📉"
+    else:
+        return "Very Negative ❄️"
+
+def generate_impact_analysis(headline, entity, sentiment):
+    """Generate impact analysis based on headline content and sentiment"""
+    
+    # Base the analysis on the entity type and sentiment
+    if entity.lower() in ['sec', 'regulation', 'lawsuit', 'settlement']:
+        if sentiment > 0.2:
+            return f"Positive regulatory development could reduce uncertainty and attract institutional investment."
+        elif sentiment < -0.2:
+            return f"Regulatory concerns may create selling pressure in the short term. Legal challenges could affect adoption."
+        else:
+            return f"Regulatory developments are unfolding. Monitor closely as outcomes will impact market direction."
+            
+    elif entity.lower() in ['etf', 'blackrock', 'fidelity', 'grayscale']:
+        if sentiment > 0.2:
+            return f"Positive ETF developments typically boost institutional confidence and can lead to significant capital inflow."
+        elif sentiment < -0.2:
+            return f"ETF setbacks may temporarily dampen institutional interest, potentially triggering sell-offs."
+        else:
+            return f"ETF-related news requires careful analysis. Watch for institutional positioning in response."
+            
+    elif entity.lower() in ['biden', 'trump', 'powell', 'federal reserve', 'fed']:
+        if sentiment > 0.2:
+            return f"Favorable political/monetary policy statements often provide positive market sentiment."
+        elif sentiment < -0.2:
+            return f"Political/monetary uncertainty can create market volatility and risk-off sentiment."
+        else:
+            return f"Political and monetary policy developments have complex market implications. Watch for clarity."
+            
+    elif entity.lower() in ['hack', 'security breach']:
+        return f"Security incidents typically create immediate selling pressure and can have lingering trust implications."
+        
+    elif entity.lower() in ['whale', 'liquidation']:
+        if sentiment > 0:
+            return f"Large investor activity could indicate accumulation and potential price support."
+        else:
+            return f"Large selling/liquidation events often create short-term downward pressure but can create buying opportunities."
+    
+    # Generic analysis based on sentiment
+    elif sentiment > 0.5:
+        return f"This highly positive development could drive short-term upward price movement."
+    elif sentiment > 0:
+        return f"Moderately positive news that may contribute to upward price momentum."
+    elif sentiment > -0.5:
+        return f"Slightly negative news that could create minor selling pressure."
+    else:
+        return f"Significantly negative development that might trigger immediate selling."
 
 def get_crypto_price(symbol):
     """Get current price for a cryptocurrency in USD"""
