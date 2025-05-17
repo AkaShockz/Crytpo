@@ -777,6 +777,9 @@ async def scan_for_breaking_news():
                                     # Store this headline hash to avoid duplicates
                                     scan_for_breaking_news.last_news_hash = headline_hash
                                     
+                                    # Try to find the actual article URL that contains this headline
+                                    article_url = find_article_url(html_content, clean_headline, source_url)
+                                    
                                     # Analyze headline for coins and sentiment
                                     affected_coins = []
                                     for coin in SUPPORTED_COINS:
@@ -801,7 +804,7 @@ async def scan_for_breaking_news():
                                         'impact_analysis': impact_analysis,
                                         'affected_coins': affected_coins,
                                         'source_name': source_url.split('//')[1].split('/')[0],
-                                        'source_url': source_url,
+                                        'source_url': article_url,  # Use the specific article URL
                                         'sentiment': sentiment_score,
                                         'sentiment_text': sentiment_text
                                     }
@@ -821,6 +824,56 @@ async def scan_for_breaking_news():
         
         # No breaking news found
         return None
+
+def find_article_url(html_content, headline, source_base_url):
+    """Find the actual article URL from the content based on headline match"""
+    try:
+        # Look for links with text similar to the headline
+        # This is a simplified approach - real implementation would need site-specific parsing
+        
+        # First, try to find links with headline text
+        headline_words = headline.lower().split()
+        significant_words = [word for word in headline_words if len(word) > 4][:3]  # Use up to 3 significant words
+        
+        # Build a pattern to find links containing these words
+        if significant_words:
+            word_pattern = '|'.join(significant_words)
+            link_pattern = re.compile(f'<a[^>]*href="([^"]*)"[^>]*>(?:[^<]*(?:{word_pattern})[^<]*)</a>', re.IGNORECASE)
+            matches = link_pattern.findall(html_content)
+            
+            if matches:
+                article_url = matches[0]
+                # If it's a relative URL, make it absolute
+                if article_url.startswith('/'):
+                    # Extract base domain from source_base_url
+                    domain = '/'.join(source_base_url.split('/')[:3])  # http(s)://domain.com
+                    article_url = f"{domain}{article_url}"
+                elif not article_url.startswith(('http://', 'https://')):
+                    article_url = f"{source_base_url.rstrip('/')}/{article_url.lstrip('/')}"
+                
+                return article_url
+        
+        # Fallback: try to find any news article link
+        news_link_pattern = re.compile(r'<a[^>]*href="([^"]*(?:article|news|story|post)[^"]*)"[^>]*>', re.IGNORECASE)
+        news_matches = news_link_pattern.findall(html_content)
+        
+        if news_matches:
+            article_url = news_matches[0]
+            # If it's a relative URL, make it absolute
+            if article_url.startswith('/'):
+                # Extract base domain from source_base_url
+                domain = '/'.join(source_base_url.split('/')[:3])  # http(s)://domain.com
+                article_url = f"{domain}{article_url}"
+            elif not article_url.startswith(('http://', 'https://')):
+                article_url = f"{source_base_url.rstrip('/')}/{article_url.lstrip('/')}"
+            
+            return article_url
+    
+    except Exception as e:
+        print(f"Error finding article URL: {e}")
+    
+    # If everything fails, just return the base URL
+    return source_base_url
 
 def calculate_news_sentiment(headline):
     """Calculate sentiment score from headline text (-1 to +1 scale)"""
