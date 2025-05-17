@@ -1,0 +1,12 @@
+pandas==1.5.3
+numpy==1.24.3
+requests==2.31.0
+python-binance==1.0.19
+newsapi-python==0.2.7
+tweepy==4.14.0
+python-dotenv==1.0.0
+PySide6==6.9.0
+pyqtgraph==0.13.3
+ta==0.10.2
+schedule==1.2.0
+textblob==0.17.1 
