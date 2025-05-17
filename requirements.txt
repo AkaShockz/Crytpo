@@ -1,6 +1,8 @@
+discord.py==2.3.2
+requests
+
 pandas==1.5.3
 numpy==1.24.3
-requests==2.31.0
 python-binance==1.0.19
 newsapi-python==0.2.7
 tweepy==4.14.0
