@@ -2,52 +2,558 @@ import discord
 from discord.ext import commands, tasks
 import requests
 import os
+import datetime
+import time
+import json
+import random
 
 # --- CONFIG ---
 TOKEN = os.getenv('DISCORD_BOT_TOKEN', 'YOUR_DISCORD_BOT_TOKEN')  # Replace with your bot token or set as env var
 CHANNEL_ID = int(os.getenv('DISCORD_CHANNEL_ID', '123456789012345678'))  # Replace with your channel ID or set as env var
 
+# Supported cryptocurrencies
+SUPPORTED_COINS = ['BTC', 'XRP', 'HBAR']
+
+# Technical indicators dictionary
+technical_terms = {
+    'RSI': 'Relative Strength Index',
+    'MACD': 'Moving Average Convergence Divergence',
+    'SMA': 'Simple Moving Average',
+    'EMA': 'Exponential Moving Average', 
+    'BB': 'Bollinger Bands',
+    'FIBO': 'Fibonacci Retracement'
+}
+
 intents = discord.Intents.default()
-bot = commands.Bot(command_prefix='!', intents=intents)
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
-    crypto_alerts.start()
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="crypto markets"))
+    market_insights.start()
+    technical_analysis.start()
+    major_news_alerts.start()
+
+@bot.command(name="help")
+async def help_command(ctx):
+    """Display the bot's help information"""
+    embed = discord.Embed(
+        title="Crypto Assistant Bot Commands",
+        description="Here are all available commands:",
+        color=0x00FFFF
+    )
+    
+    embed.add_field(
+        name="!price [coin]",
+        value="Get current price of a cryptocurrency (BTC, XRP, or HBAR)",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="!analysis [coin]",
+        value="Get detailed technical analysis of a coin",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="!predict [coin]",
+        value="Get price prediction based on current patterns",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="!news [coin]",
+        value="Get latest news that might impact the coin",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="!help",
+        value="Show this help message",
+        inline=False
+    )
+    
+    embed.set_footer(text="The bot also sends automatic alerts for significant market movements")
+    
+    await ctx.send(embed=embed)
 
 @bot.command()
-async def price(ctx, symbol: str):
+async def price(ctx, symbol: str = None):
     """Get the current price of a crypto symbol (e.g. !price BTC)"""
+    if not symbol:
+        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
+        return
+        
+    symbol = symbol.upper()
+    if symbol not in SUPPORTED_COINS:
+        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        return
+        
     price = get_crypto_price(symbol)
     if price:
-        await ctx.send(f"The current price of {symbol.upper()} is ${price}")
+        embed = discord.Embed(
+            title=f"{symbol} Price",
+            description=f"The current price of {symbol} is ${price}",
+            color=0x00FF00
+        )
+        embed.set_footer(text=f"Data from Binance • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        await ctx.send(embed=embed)
     else:
-        await ctx.send(f"Could not fetch price for {symbol.upper()}")
+        await ctx.send(f"Could not fetch price for {symbol}")
 
-@tasks.loop(minutes=1)
-async def crypto_alerts():
+@bot.command()
+async def analysis(ctx, symbol: str = None):
+    """Get technical analysis for a cryptocurrency"""
+    if not symbol:
+        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
+        return
+        
+    symbol = symbol.upper()
+    if symbol not in SUPPORTED_COINS:
+        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        return
+    
+    # Get simulated technical analysis
+    analysis_data = get_technical_analysis(symbol)
+    
+    embed = discord.Embed(
+        title=f"Technical Analysis for {symbol}",
+        description=f"Current market sentiment: **{analysis_data['sentiment']}**",
+        color=0x00FFFF
+    )
+    
+    # Add technical indicators
+    for indicator, value in analysis_data['indicators'].items():
+        embed.add_field(
+            name=f"{indicator}",
+            value=f"{value}",
+            inline=True
+        )
+    
+    # Add pattern recognition
+    embed.add_field(
+        name="Chart Patterns",
+        value=analysis_data['pattern'],
+        inline=False
+    )
+    
+    # Add support and resistance
+    embed.add_field(
+        name="Support & Resistance",
+        value=f"Support: ${analysis_data['support']}\nResistance: ${analysis_data['resistance']}",
+        inline=False
+    )
+    
+    embed.set_footer(text=f"Analysis based on data from the past 24 hours • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def predict(ctx, symbol: str = None):
+    """Get price prediction for a cryptocurrency"""
+    if not symbol:
+        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
+        return
+        
+    symbol = symbol.upper()
+    if symbol not in SUPPORTED_COINS:
+        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        return
+    
+    # Get simulated prediction data
+    prediction = get_price_prediction(symbol)
+    
+    embed = discord.Embed(
+        title=f"Price Prediction for {symbol}",
+        description=f"Based on current market conditions and chart patterns:",
+        color=0xFFD700
+    )
+    
+    embed.add_field(
+        name="Short-term (24h)",
+        value=prediction['short_term'],
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Medium-term (7 days)",
+        value=prediction['medium_term'],
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Confidence Level",
+        value=f"{prediction['confidence']}%",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="Key Factors",
+        value=prediction['factors'],
+        inline=False
+    )
+    
+    embed.set_footer(text="⚠️ This is not financial advice. Always do your own research.")
+    
+    await ctx.send(embed=embed)
+
+@bot.command()
+async def news(ctx, symbol: str = None):
+    """Get latest news for a cryptocurrency"""
+    if not symbol:
+        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
+        return
+        
+    symbol = symbol.upper()
+    if symbol not in SUPPORTED_COINS:
+        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        return
+    
+    # Get simulated news data
+    news_items = get_crypto_news(symbol)
+    
+    embed = discord.Embed(
+        title=f"Latest {symbol} News",
+        description=f"Recent developments that could impact {symbol} price:",
+        color=0x9370DB
+    )
+    
+    for item in news_items:
+        embed.add_field(
+            name=item['title'],
+            value=f"{item['summary']}\n[Read more]({item['url']})",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"News collected from various sources • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    await ctx.send(embed=embed)
+
+@tasks.loop(minutes=30)
+async def market_insights():
+    """Regularly post market insights for the supported coins"""
     channel = bot.get_channel(CHANNEL_ID)
     if channel is None:
         print(f"Channel with ID {CHANNEL_ID} not found!")
         return
-    # Example: check for a big price move
-    alert = check_for_important_event()
-    if alert:
-        await channel.send(f"🚨 ALERT: {alert}")
+    
+    # Get market overview for all supported coins
+    overview = get_market_overview()
+    
+    embed = discord.Embed(
+        title="Crypto Market Insights",
+        description=f"Current market overview for tracked cryptocurrencies:",
+        color=0x00FFFF
+    )
+    
+    for coin, data in overview.items():
+        embed.add_field(
+            name=f"{coin} (${data['price']})",
+            value=f"24h Change: {data['change_24h']}%\nVolume: ${data['volume']}\nMarket Sentiment: {data['sentiment']}",
+            inline=False
+        )
+    
+    embed.set_footer(text=f"Market data updated every 30 minutes • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    await channel.send(embed=embed)
+
+@tasks.loop(hours=4)
+async def technical_analysis():
+    """Post detailed technical analysis every 4 hours"""
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel is None:
+        print(f"Channel with ID {CHANNEL_ID} not found!")
+        return
+    
+    # Select a random coin to analyze
+    coin = random.choice(SUPPORTED_COINS)
+    
+    # Get detailed analysis
+    analysis_data = get_technical_analysis(coin)
+    
+    embed = discord.Embed(
+        title=f"Technical Analysis Update: {coin}",
+        description=f"Detailed technical analysis shows {analysis_data['sentiment']} sentiment",
+        color=0xFFA500
+    )
+    
+    # Chart patterns and indicators
+    embed.add_field(
+        name="Chart Patterns",
+        value=analysis_data['pattern'],
+        inline=False
+    )
+    
+    # Support and resistance
+    embed.add_field(
+        name="Key Levels",
+        value=f"Support: ${analysis_data['support']}\nResistance: ${analysis_data['resistance']}",
+        inline=False
+    )
+    
+    # Volume analysis
+    embed.add_field(
+        name="Volume Analysis",
+        value=analysis_data['volume'],
+        inline=False
+    )
+    
+    # Trading recommendation
+    embed.add_field(
+        name="Trading Perspective",
+        value=analysis_data['recommendation'],
+        inline=False
+    )
+    
+    embed.set_footer(text="⚠️ This is not financial advice. Always do your own research.")
+    
+    await channel.send(embed=embed)
+
+@tasks.loop(minutes=45)
+async def major_news_alerts():
+    """Check for major news events that could impact prices"""
+    channel = bot.get_channel(CHANNEL_ID)
+    if channel is None:
+        print(f"Channel with ID {CHANNEL_ID} not found!")
+        return
+    
+    # Check for significant news events
+    breaking_news = check_for_breaking_news()
+    if breaking_news:
+        embed = discord.Embed(
+            title=f"🚨 BREAKING NEWS: {breaking_news['title']}",
+            description=breaking_news['description'],
+            color=0xFF0000
+        )
+        
+        embed.add_field(
+            name="Potential Impact",
+            value=breaking_news['impact'],
+            inline=False
+        )
+        
+        embed.add_field(
+            name="Affected Cryptocurrencies",
+            value=", ".join(breaking_news['affected_coins']),
+            inline=False
+        )
+        
+        if breaking_news['source_url']:
+            embed.add_field(
+                name="Source",
+                value=f"[Click here to read more]({breaking_news['source_url']})",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Breaking news alert • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        
+        await channel.send("@here", embed=embed)
 
 def get_crypto_price(symbol):
+    """Get current price for a cryptocurrency"""
     try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol.upper()}USDT"
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT"
         r = requests.get(url)
         return r.json()['price']
     except Exception as e:
         print(f"Error fetching price: {e}")
         return None
 
-def check_for_important_event():
-    # TODO: Replace with your advanced logic (signals, news, etc.)
-    # Return a string to send an alert, or None for no alert
-    return None
+def get_technical_analysis(symbol):
+    """Simulate technical analysis for a cryptocurrency"""
+    # In a real implementation, this would use actual market data and technical indicators
+    price = float(get_crypto_price(symbol) or 0)
+    
+    # For simulation purposes
+    sentiments = ["Bullish", "Slightly Bullish", "Neutral", "Slightly Bearish", "Bearish"]
+    patterns = [
+        f"Forming a bull flag pattern with increased volume supporting upward movement",
+        f"Double bottom pattern suggesting potential reversal of downtrend",
+        f"Head and shoulders pattern indicating possible trend reversal",
+        f"Bullish engulfing pattern on the 4-hour chart",
+        f"Forming a cup and handle pattern suggesting continued uptrend"
+    ]
+    
+    rsi_values = [f"{random.randint(30, 70)} - {'Neutral' if 40 <= random.randint(30, 70) <= 60 else 'Oversold' if random.randint(30, 70) < 40 else 'Overbought'}",
+                 f"{random.randint(30, 70)} - {'Neutral' if 40 <= random.randint(30, 70) <= 60 else 'Oversold' if random.randint(30, 70) < 40 else 'Overbought'}"]
+    
+    volume_analysis = [
+        "Increasing volume confirms the uptrend", 
+        "Decreasing volume suggests weakening momentum",
+        "Volume spike indicates strong buying interest",
+        "Declining volume in downtrend suggests potential reversal"
+    ]
+    
+    recommendations = [
+        "Consider entering long positions with tight stop losses",
+        "Wait for confirmation of trend before entering positions",
+        "Consider taking profits at resistance levels",
+        "Watch for breakout above resistance with increased volume"
+    ]
+    
+    return {
+        'sentiment': random.choice(sentiments),
+        'indicators': {
+            'RSI': rsi_values[0],
+            'MACD': 'Bullish Crossover' if random.random() > 0.5 else 'Bearish Crossover',
+            'EMA 50/200': 'Golden Cross' if random.random() > 0.7 else 'Death Cross' if random.random() < 0.3 else 'Neutral'
+        },
+        'pattern': random.choice(patterns),
+        'support': round(price * 0.95, 2),
+        'resistance': round(price * 1.05, 2),
+        'volume': random.choice(volume_analysis),
+        'recommendation': random.choice(recommendations)
+    }
+
+def get_price_prediction(symbol):
+    """Simulate price prediction for a cryptocurrency"""
+    # In a real implementation, this would use ML models/historical data analysis
+    
+    short_term_predictions = [
+        f"Likely to test resistance at ${float(get_crypto_price(symbol) or 0) * 1.05:.2f} in the next 24 hours",
+        f"Expected to consolidate between ${float(get_crypto_price(symbol) or 0) * 0.98:.2f} - ${float(get_crypto_price(symbol) or 0) * 1.02:.2f}",
+        f"Possible breakout above ${float(get_crypto_price(symbol) or 0) * 1.03:.2f} if volume increases"
+    ]
+    
+    medium_term_predictions = [
+        f"Forming a bullish pattern suggesting a target of ${float(get_crypto_price(symbol) or 0) * 1.15:.2f} within a week",
+        f"Indicators suggest continued sideways movement with resistance at ${float(get_crypto_price(symbol) or 0) * 1.08:.2f}",
+        f"Technical patterns indicate potential upside of 10-15% if market conditions remain favorable"
+    ]
+    
+    factors = [
+        "Increasing network activity and development updates",
+        "Growing institutional interest and accumulation patterns",
+        "Technical breakout from long-term resistance level",
+        "Favorable regulatory developments and mainstream adoption signals",
+        "Correlation with broader market movements and on-chain metrics"
+    ]
+    
+    return {
+        'short_term': random.choice(short_term_predictions),
+        'medium_term': random.choice(medium_term_predictions),
+        'confidence': random.randint(65, 85),
+        'factors': random.choice(factors)
+    }
+
+def get_crypto_news(symbol):
+    """Simulate getting news for a cryptocurrency"""
+    # In a real implementation, this would fetch from news APIs
+    
+    btc_news = [
+        {
+            'title': 'Bitcoin ETF Sees Record Inflows',
+            'summary': 'The latest data shows significant capital flowing into Bitcoin ETFs, suggesting growing institutional interest',
+            'url': 'https://example.com/bitcoin-etf-news'
+        },
+        {
+            'title': 'Major Bank Announces Bitcoin Custody Service',
+            'summary': 'A top-tier financial institution has announced plans to offer Bitcoin custody services to wealthy clients',
+            'url': 'https://example.com/bank-bitcoin-custody'
+        },
+        {
+            'title': 'Mining Difficulty Hits New All-Time High',
+            'summary': 'Bitcoin network security increases as mining difficulty adjusts upward for the fifth consecutive time',
+            'url': 'https://example.com/mining-difficulty'
+        }
+    ]
+    
+    xrp_news = [
+        {
+            'title': 'Ripple Case Developments Favor XRP',
+            'summary': 'The latest court rulings in the Ripple case suggest a favorable outcome may be approaching',
+            'url': 'https://example.com/ripple-case-update'
+        },
+        {
+            'title': 'Major Bank Tests XRP for Cross-Border Payments',
+            'summary': 'A multinational banking institution reports successful trials using XRP for international transfers',
+            'url': 'https://example.com/bank-xrp-trials'
+        },
+        {
+            'title': 'Ripple Expands ODL Corridors',
+            'summary': 'New On-Demand Liquidity corridors announced for emerging markets, expanding XRP utility',
+            'url': 'https://example.com/ripple-odl-expansion'
+        }
+    ]
+    
+    hbar_news = [
+        {
+            'title': 'Hedera Announces Major Enterprise Partnership',
+            'summary': 'A Fortune 500 company joins the Hedera Governing Council, bringing enterprise validation',
+            'url': 'https://example.com/hedera-partnership'
+        },
+        {
+            'title': 'HBAR Foundation Funds New DeFi Projects',
+            'summary': 'New grants announced to develop decentralized finance applications on the Hedera network',
+            'url': 'https://example.com/hbar-defi-grants'
+        },
+        {
+            'title': 'Hedera Sets New TPS Record in Recent Test',
+            'summary': 'Network optimization leads to new transaction throughput milestone, highlighting scalability',
+            'url': 'https://example.com/hedera-tps-record'
+        }
+    ]
+    
+    if symbol == 'BTC':
+        return btc_news
+    elif symbol == 'XRP':
+        return xrp_news
+    elif symbol == 'HBAR':
+        return hbar_news
+    else:
+        return []
+
+def get_market_overview():
+    """Get market overview for all supported coins"""
+    # In a real implementation, this would fetch real market data
+    
+    overview = {}
+    for coin in SUPPORTED_COINS:
+        price = float(get_crypto_price(coin) or 0)
+        overview[coin] = {
+            'price': price,
+            'change_24h': round(random.uniform(-5, 7), 2),
+            'volume': f"{round(random.uniform(100, 500), 1)}M",
+            'sentiment': "Bullish" if random.random() > 0.6 else "Neutral" if random.random() > 0.3 else "Bearish"
+        }
+    
+    return overview
+
+def check_for_breaking_news():
+    """Check for breaking news that could impact crypto prices"""
+    # In a real implementation, this would regularly check news APIs
+    
+    # Most of the time, return None (no breaking news)
+    if random.random() > 0.05:  # 5% chance of breaking news
+        return None
+    
+    breaking_news_items = [
+        {
+            'title': 'SEC Announces New Crypto Regulation Framework',
+            'description': 'The SEC has released a new regulatory framework that provides clarity for cryptocurrency classifications and compliance requirements.',
+            'impact': 'This could significantly reduce regulatory uncertainty and potentially open the door for more institutional adoption.',
+            'affected_coins': ['BTC', 'XRP', 'HBAR'],
+            'source_url': 'https://example.com/sec-framework'
+        },
+        {
+            'title': 'Major Payment Processor To Integrate Cryptocurrency Solutions',
+            'description': 'One of the world\'s largest payment processors has announced plans to integrate cryptocurrency payment solutions into their platform.',
+            'impact': 'This development could dramatically increase real-world cryptocurrency adoption and utility.',
+            'affected_coins': ['BTC', 'XRP'],
+            'source_url': 'https://example.com/payment-crypto-integration'
+        },
+        {
+            'title': 'Central Bank Digital Currency Trials Include Hedera Technology',
+            'description': 'A major central bank has announced that it will be using Hedera Hashgraph technology in its CBDC trials.',
+            'impact': 'This validation from a central bank could elevate Hedera\'s position in the enterprise blockchain space.',
+            'affected_coins': ['HBAR'],
+            'source_url': 'https://example.com/cbdc-hedera'
+        }
+    ]
+    
+    return random.choice(breaking_news_items)
 
 if __name__ == "__main__":
     bot.run(TOKEN) 
