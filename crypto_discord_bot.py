@@ -53,42 +53,48 @@ async def on_ready():
 async def help_command(interaction: discord.Interaction):
     """Display the bot's help information"""
     embed = discord.Embed(
-        title="Crypto Assistant Bot Commands",
-        description="Here are all available commands:",
+        title="Crypto Assistant Bot - Beginner's Guide",
+        description="Here are all available commands with simple explanations:",
         color=0x00FFFF
     )
     
     embed.add_field(
-        name="/price [coin]",
-        value="Get current price of a cryptocurrency (BTC, XRP, or HBAR)",
+        name="💰 /price [coin]",
+        value="Shows the current market price of a cryptocurrency in British Pounds (GBP).\nSupported coins: BTC (Bitcoin), XRP (Ripple), or HBAR (Hedera)",
         inline=False
     )
     
     embed.add_field(
-        name="/analysis [coin]",
-        value="Get detailed technical analysis of a coin",
+        name="📊 /analysis [coin]",
+        value="Explains what the charts are showing right now - is the coin likely to go up, down or stay the same? Includes explanations of technical terms.",
         inline=False
     )
     
     embed.add_field(
-        name="/predict [coin]",
-        value="Get price prediction based on current patterns",
+        name="🔮 /predict [coin]",
+        value="Gives price predictions for the next 24 hours and 7 days. Includes chart patterns, potential buy/sell levels, and confidence ratings.",
         inline=False
     )
     
     embed.add_field(
-        name="/news [coin]",
-        value="Get latest news that might impact the coin",
+        name="📰 /news [coin]",
+        value="Shows the latest news and upcoming events (like network updates, court cases, etc.) that might affect the coin's price.",
         inline=False
     )
     
     embed.add_field(
-        name="/help",
-        value="Show this help message",
+        name="❓ /help",
+        value="Shows this guide to help you understand how to use the bot",
         inline=False
     )
     
-    embed.set_footer(text="The bot also sends automatic alerts for significant market movements")
+    embed.add_field(
+        name="📚 Crypto Terms Explained",
+        value="• **Support**: Price level where a coin tends to stop falling\n• **Resistance**: Price level where a coin struggles to rise above\n• **Bull/Bullish**: Market/pattern expecting prices to rise\n• **Bear/Bearish**: Market/pattern expecting prices to fall",
+        inline=False
+    )
+    
+    embed.set_footer(text="Remember: The bot sends automatic alerts for big market moves. All prices shown in British Pounds (£).")
     
     await interaction.response.send_message(embed=embed)
 
@@ -168,6 +174,15 @@ async def analysis(interaction: discord.Interaction, symbol: str):
     
     await interaction.response.send_message(embed=embed)
 
+def get_pattern_explanation(direction):
+    """Get a simple explanation of what the pattern direction means for beginners"""
+    if direction == "bullish":
+        return "This pattern typically suggests the price might go up soon."
+    elif direction == "bearish":
+        return "This pattern typically suggests the price might go down soon."
+    else:
+        return "This pattern suggests the price might continue moving sideways for a while."
+
 @bot.tree.command(name="predict", description="Get price prediction for a cryptocurrency")
 @app_commands.describe(symbol="The cryptocurrency symbol (BTC, XRP, or HBAR)")
 async def predict(interaction: discord.Interaction, symbol: str):
@@ -194,10 +209,15 @@ async def predict(interaction: discord.Interaction, symbol: str):
         color=color
     )
     
-    # Chart pattern with success rate and price target
+    # Chart pattern with success rate, price target, and beginner explanation
     embed.add_field(
         name="📊 Technical Pattern Analysis",
-        value=f"{prediction['upcoming_pattern']}\n**Success Rate:** {prediction['pattern_success_rate']}\n**Target:** {prediction['pattern_target']}",
+        value=(
+            f"{prediction['upcoming_pattern']}\n"
+            f"**Success Rate:** {prediction['pattern_success_rate']} (how often this pattern works)\n"
+            f"**Target:** {prediction['pattern_target']} (potential price if pattern completes)\n"
+            f"**What This Means:** {get_pattern_explanation(prediction['pattern_direction'])}"
+        ),
         inline=False
     )
     
@@ -213,9 +233,10 @@ async def predict(interaction: discord.Interaction, symbol: str):
         inline=False
     )
     
+    # Added disclaimer about confidence levels for beginners
     embed.add_field(
         name="🎯 Confidence Level",
-        value=f"{prediction['confidence']}% based on historical pattern completion and volume metrics",
+        value=f"{prediction['confidence']}% based on historical pattern completion and volume metrics\n*(Note: Even high confidence predictions can be wrong due to unexpected market events)*",
         inline=False
     )
     
@@ -231,24 +252,54 @@ async def predict(interaction: discord.Interaction, symbol: str):
         inline=False
     )
     
-    # Add a trading strategy hint based on the pattern direction
+    # Add a trading strategy hint based on the pattern direction - simplified for beginners
+    price_target = float(prediction['pattern_target'].replace('£', ''))
+    
     if prediction['pattern_direction'] == "bullish":
-        strategy = f"**Trading Strategy:** Consider accumulating at support levels (£{float(prediction['pattern_target'].replace('£', '')) * 0.92:.4f}) with stop-loss orders at £{float(prediction['pattern_target'].replace('£', '')) * 0.88:.4f}. Set profit targets at 1.5R and 2.5R risk multiples."
+        buy_price = price_target * 0.92
+        stop_loss = price_target * 0.88
+        profit_target = price_target * 1.08
+        
+        strategy = (
+            f"**Beginner-Friendly Strategy (BULLISH OUTLOOK):**\n"
+            f"• **Possible Buy Zone:** Around £{buy_price:.4f}\n"
+            f"• **Where to Place Stop-Loss:** £{stop_loss:.4f} (to limit potential losses)\n"
+            f"• **Target Sell Price:** £{profit_target:.4f}\n"
+            f"• **Simple Explanation:** Charts suggest price might rise. Consider buying at support levels and selling at the target."
+        )
     elif prediction['pattern_direction'] == "bearish":
-        strategy = f"**Trading Strategy:** Consider reducing exposure at current levels. If holding, set stop-loss orders at £{float(prediction['pattern_target'].replace('£', '')) * 1.05:.4f}. Look for potential re-entry near £{float(prediction['pattern_target'].replace('£', '')) * 0.95:.4f}."
+        sell_now_price = price_target * 1.02
+        stop_loss = price_target * 1.05
+        reentry_price = price_target * 0.95
+        
+        strategy = (
+            f"**Beginner-Friendly Strategy (BEARISH OUTLOOK):**\n"
+            f"• **Current Action:** Consider taking profits if you already own this coin (around £{sell_now_price:.4f})\n"
+            f"• **Where to Place Stop-Loss:** £{stop_loss:.4f} (if continuing to hold)\n"
+            f"• **Potential Buy-Back Level:** Around £{reentry_price:.4f} (after price drops)\n"
+            f"• **Simple Explanation:** Charts suggest price might fall. If you own this coin, consider selling some now and buying back cheaper later."
+        )
     else:
         # For neutral patterns, we need to handle the target differently
         target_parts = prediction['pattern_target'].split(' ')
         base_price = float(target_parts[0].replace('£', ''))
-        strategy = f"**Trading Strategy:** Range-bound conditions favor swing trading between support (£{base_price * 0.97:.4f}) and resistance (£{base_price * 1.03:.4f}) levels with tight stop-losses."
+        support = base_price * 0.97
+        resistance = base_price * 1.03
+        
+        strategy = (
+            f"**Beginner-Friendly Strategy (SIDEWAYS OUTLOOK):**\n"
+            f"• **Buy Zone:** Near £{support:.4f} (when price dips)\n"
+            f"• **Sell Zone:** Near £{resistance:.4f} (when price rises)\n"
+            f"• **Simple Explanation:** Charts suggest price moving sideways in a range. Consider buying near the bottom of the range and selling near the top."
+        )
     
     embed.add_field(
-        name="💰 Money-Making Strategy",
+        name="💰 Suggested Trading Approach",
         value=strategy,
         inline=False
     )
     
-    embed.set_footer(text="⚠️ This is not financial advice. Always do your own research and consider your risk tolerance.")
+    embed.set_footer(text="⚠️ IMPORTANT: This is not financial advice - all predictions have risks. Only invest what you can afford to lose. Past patterns don't guarantee future results.")
     
     await interaction.response.send_message(embed=embed)
 
