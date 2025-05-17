@@ -79,6 +79,9 @@ TWITTER_ACCOUNTS = [
     'APompliano', 'tyler', 'garyvee'
 ]
 
+# Add a set to track sent news hashes at the top (after imports)
+sent_news_hashes = set()
+
 # Market state dictionary to ensure consistent predictions across all bot functions
 # The state is determined based on real market data (price changes, volume)
 class MarketStateManager:
@@ -781,69 +784,45 @@ async def monitor_breaking_news():
 
 async def scan_for_breaking_news():
     """Scan various sources for breaking crypto news with market impact"""
-    # Last checked timestamps for different sources (to avoid duplicates)
     last_checked = getattr(scan_for_breaking_news, 'last_checked', {})
     last_news_hash = getattr(scan_for_breaking_news, 'last_news_hash', '')
-    
-    # Store the timestamps and hash as function attributes for persistence
     scan_for_breaking_news.last_checked = last_checked
-    
-    # Get current time
     now = datetime.datetime.now()
-    
-    # Initialize aiohttp session
     async with aiohttp.ClientSession() as session:
-        # Check crypto news websites
         for source_url in NEWS_SOURCES:
-            # Avoid checking same source too frequently
-            if source_url in last_checked and now - last_checked[source_url] < timedelta(minutes=5):  # Reduced to 5 minutes
+            if source_url in last_checked and now - last_checked[source_url] < timedelta(minutes=5):
                 continue
-                
             try:
                 async with session.get(source_url, timeout=10) as response:
                     if response.status == 200:
                         html_content = await response.text()
-                        
-                        # Look for headlines with market-moving keywords
                         for entity in MARKET_MOVERS:
-                            # Case insensitive search
                             pattern = re.compile(f"<h\\d[^>]*>.*({entity}).*?</h\\d>", re.IGNORECASE)
                             headlines = pattern.findall(html_content)
-                            
                             if headlines:
                                 for headline in headlines:
-                                    # Clean up the headline
                                     clean_headline = re.sub('<.*?>', '', headline)
-                                    
-                                    # Create a hash of the headline to avoid duplicates
                                     headline_hash = hash(clean_headline)
-                                    if headline_hash == last_news_hash:
-                                        continue  # Skip if we've seen this before
-                                    
-                                    # Store this headline hash to avoid duplicates
+                                    # Only send if not already sent
+                                    if headline_hash == last_news_hash or headline_hash in sent_news_hashes:
+                                        continue
                                     scan_for_breaking_news.last_news_hash = headline_hash
-                                    
-                                    # Try to find the actual article URL that contains this headline
+                                    sent_news_hashes.add(headline_hash)
                                     article_url = find_article_url(html_content, clean_headline, source_url)
-                                    
-                                    # Analyze headline for affected coins and determine impact (positive/negative)
                                     affected_coins_analysis = analyze_crypto_impact(clean_headline, entity)
-                                    
-                                    # Very basic sentiment analysis (would use more sophisticated NLP in production)
                                     sentiment_score = calculate_news_sentiment(clean_headline)
                                     sentiment_text = get_sentiment_text(sentiment_score)
-                                    
-                                    # Generate impact analysis based on the headline and sentiment
                                     impact_analysis = generate_impact_analysis(clean_headline, entity, sentiment_score)
-                                    
-                                    # Determine if this is Trump-related for higher visibility
-                                    is_trump_related = any(trump_term.lower() in clean_headline.lower() 
-                                                          for trump_term in ['trump', 'potus', 'president trump'])
-                                    
-                                    # Build the news object
+                                    is_trump_related = any(trump_term.lower() in clean_headline.lower() for trump_term in ['trump', 'potus', 'president trump'])
+                                    # Improved summary: include headline and why it's good/bad
+                                    summary = f"{clean_headline}\n"
+                                    if affected_coins_analysis['positive_reason']:
+                                        summary += f"\nWhy good: {affected_coins_analysis['positive_reason']}"
+                                    if affected_coins_analysis['negative_reason']:
+                                        summary += f"\nWhy bad: {affected_coins_analysis['negative_reason']}"
                                     breaking_news = {
                                         'title': clean_headline,
-                                        'summary': f"Breaking news related to {entity.upper()} that could impact crypto markets.",
+                                        'summary': summary.strip(),
                                         'impact_analysis': impact_analysis,
                                         'affected_coins': affected_coins_analysis['all_affected'],
                                         'positive_impact_coins': affected_coins_analysis['positive_impact'],
@@ -856,25 +835,18 @@ async def scan_for_breaking_news():
                                         'sentiment_text': sentiment_text,
                                         'is_trump_related': is_trump_related
                                     }
-                                    
-                                    # Record that we've checked this source
                                     last_checked[source_url] = now
-                                    
+                                    # If it's XRP or HBAR news, always send immediately
+                                    if any(coin in breaking_news['affected_coins'] for coin in ['XRP', 'HBAR']):
+                                        return breaking_news
                                     # If it's Trump-related, give it higher priority
                                     if is_trump_related:
                                         return breaking_news
-                                    
                                     return breaking_news
-                        
-                        # Record that we've checked this source
                         last_checked[source_url] = now
-            
             except Exception as e:
                 print(f"Error checking {source_url}: {e}")
-                # Record that we've checked this source even if it failed
                 last_checked[source_url] = now
-        
-        # No breaking news found
         return None
 
 def analyze_crypto_impact(headline, mentioned_entity):
