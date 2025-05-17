@@ -724,8 +724,8 @@ async def monitor_breaking_news():
             
             embed.set_footer(text=f"Breaking news detected at {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')} • Sentiment: {breaking_news['sentiment_text']}")
             
-            # Send as @here message for visibility
-            await channel.send("@here **BREAKING MARKET NEWS ALERT!**", embed=embed)
+            # Send as normal message without @here mention
+            await channel.send("**BREAKING MARKET NEWS ALERT!**", embed=embed)
     
     except Exception as e:
         print(f"Error in news monitoring: {e}")
