@@ -187,6 +187,12 @@ async def predict(interaction: discord.Interaction, symbol: str):
     )
     
     embed.add_field(
+        name="📊 Forming Chart Pattern",
+        value=prediction['upcoming_pattern'],
+        inline=False
+    )
+    
+    embed.add_field(
         name="Short-term (24h)",
         value=prediction['short_term'],
         inline=False
@@ -210,6 +216,12 @@ async def predict(interaction: discord.Interaction, symbol: str):
         inline=False
     )
     
+    embed.add_field(
+        name="📅 Upcoming Events",
+        value=prediction['upcoming_events'],
+        inline=False
+    )
+    
     embed.set_footer(text="⚠️ This is not financial advice. Always do your own research.")
     
     await interaction.response.send_message(embed=embed)
@@ -227,12 +239,35 @@ async def news(interaction: discord.Interaction, symbol: str):
     news_items = get_crypto_news(symbol)
     
     embed = discord.Embed(
-        title=f"Latest {symbol} News",
-        description=f"Recent developments that could impact {symbol} price:",
+        title=f"{symbol} News & Upcoming Events",
+        description=f"Recent and upcoming developments that could impact {symbol} price:",
         color=0x9370DB
     )
     
-    for item in news_items:
+    # First add current news
+    embed.add_field(
+        name="📰 CURRENT NEWS",
+        value="─────────────────────",
+        inline=False
+    )
+    
+    current_news = [item for item in news_items if item['type'] == 'current']
+    for item in current_news:
+        embed.add_field(
+            name=item['title'],
+            value=f"{item['summary']}\n[Read more]({item['url']})",
+            inline=False
+        )
+    
+    # Then add upcoming events
+    embed.add_field(
+        name="🔮 UPCOMING EVENTS",
+        value="─────────────────────",
+        inline=False
+    )
+    
+    upcoming_news = [item for item in news_items if item['type'] == 'upcoming']
+    for item in upcoming_news:
         embed.add_field(
             name=item['title'],
             value=f"{item['summary']}\n[Read more]({item['url']})",
@@ -500,6 +535,15 @@ def get_price_prediction(symbol):
     usd_price = float(get_crypto_price(symbol) or 0)
     gbp_price = convert_usd_to_gbp(usd_price)
     
+    # Generate upcoming pattern detection
+    upcoming_patterns = [
+        f"Developing inverted head and shoulders pattern could signal bullish reversal within 48 hours",
+        f"Triangle pattern forming, expect breakout decision by {(datetime.datetime.now() + datetime.timedelta(days=2)).strftime('%d %b')}",
+        f"Double top pattern nearing completion, watch for confirmation within 24-36 hours",
+        f"Potential cup and handle formation developing, completion expected by {(datetime.datetime.now() + datetime.timedelta(days=3)).strftime('%d %b')}",
+        f"Bullish flag consolidation nearly complete, breakout likely within 24-48 hours"
+    ]
+    
     short_term_predictions = [
         f"Likely to test resistance at £{gbp_price * 1.05:.2f} in the next 24 hours",
         f"Expected to consolidate between £{gbp_price * 0.98:.2f} - £{gbp_price * 1.02:.2f}",
@@ -520,11 +564,31 @@ def get_price_prediction(symbol):
         "Correlation with broader market movements and on-chain metrics"
     ]
     
+    # Check for upcoming scheduled events
+    upcoming_events = []
+    if symbol == 'BTC':
+        upcoming_events = [
+            f"Bitcoin options expiry on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(1, 14))).strftime('%d %b')}",
+            f"Major mining difficulty adjustment expected in approximately {random.randint(2, 10)} days"
+        ]
+    elif symbol == 'XRP':
+        upcoming_events = [
+            f"Scheduled Ripple developments announcement on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(1, 7))).strftime('%d %b')}",
+            f"Next court hearing in SEC case on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(5, 30))).strftime('%d %b')}"
+        ]
+    elif symbol == 'HBAR':
+        upcoming_events = [
+            f"Hedera Council meeting on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(3, 21))).strftime('%d %b')}",
+            f"Major partnership announcement expected within the next {random.randint(1, 2)} weeks"
+        ]
+    
     return {
+        'upcoming_pattern': random.choice(upcoming_patterns),
         'short_term': random.choice(short_term_predictions),
         'medium_term': random.choice(medium_term_predictions),
         'confidence': random.randint(65, 85),
-        'factors': random.choice(factors)
+        'factors': random.choice(factors),
+        'upcoming_events': random.choice(upcoming_events) if upcoming_events else "No major scheduled events in the immediate future"
     }
 
 def get_crypto_news(symbol):
@@ -535,17 +599,26 @@ def get_crypto_news(symbol):
         {
             'title': 'Bitcoin ETF Sees Record Inflows',
             'summary': 'The latest data shows significant capital flowing into Bitcoin ETFs, suggesting growing institutional interest',
-            'url': 'https://example.com/bitcoin-etf-news'
+            'url': 'https://example.com/bitcoin-etf-news',
+            'type': 'current'
         },
         {
             'title': 'Major Bank Announces Bitcoin Custody Service',
             'summary': 'A top-tier financial institution has announced plans to offer Bitcoin custody services to wealthy clients',
-            'url': 'https://example.com/bank-bitcoin-custody'
+            'url': 'https://example.com/bank-bitcoin-custody',
+            'type': 'current'
         },
         {
-            'title': 'Mining Difficulty Hits New All-Time High',
-            'summary': 'Bitcoin network security increases as mining difficulty adjusts upward for the fifth consecutive time',
-            'url': 'https://example.com/mining-difficulty'
+            'title': f'Bitcoin Halving Approaching in {random.randint(10, 120)} Days',
+            'summary': 'The upcoming Bitcoin halving will reduce mining rewards, historically leading to price increases',
+            'url': 'https://example.com/bitcoin-halving',
+            'type': 'upcoming'
+        },
+        {
+            'title': f'Major Exchange to Launch Bitcoin Derivatives on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(5, 30))).strftime("%d %B")}',
+            'summary': 'A leading cryptocurrency exchange has announced plans to launch new Bitcoin derivative products',
+            'url': 'https://example.com/btc-derivatives',
+            'type': 'upcoming'
         }
     ]
     
@@ -553,17 +626,26 @@ def get_crypto_news(symbol):
         {
             'title': 'Ripple Case Developments Favor XRP',
             'summary': 'The latest court rulings in the Ripple case suggest a favorable outcome may be approaching',
-            'url': 'https://example.com/ripple-case-update'
+            'url': 'https://example.com/ripple-case-update',
+            'type': 'current'
         },
         {
             'title': 'Major Bank Tests XRP for Cross-Border Payments',
             'summary': 'A multinational banking institution reports successful trials using XRP for international transfers',
-            'url': 'https://example.com/bank-xrp-trials'
+            'url': 'https://example.com/bank-xrp-trials',
+            'type': 'current'
         },
         {
-            'title': 'Ripple Expands ODL Corridors',
-            'summary': 'New On-Demand Liquidity corridors announced for emerging markets, expanding XRP utility',
-            'url': 'https://example.com/ripple-odl-expansion'
+            'title': f'Ripple to Release New XRPL Update on {(datetime.datetime.now() + datetime.timedelta(days=random.randint(3, 14))).strftime("%d %B")}',
+            'summary': 'The upcoming XRP Ledger update will introduce new features aimed at improving smart contract functionality',
+            'url': 'https://example.com/xrpl-update',
+            'type': 'upcoming'
+        },
+        {
+            'title': f'XRP Community Planning Virtual Conference for {(datetime.datetime.now() + datetime.timedelta(days=random.randint(10, 45))).strftime("%B")}',
+            'summary': 'The XRP community is organizing a major virtual conference with key developers and executives',
+            'url': 'https://example.com/xrp-conference',
+            'type': 'upcoming'
         }
     ]
     
@@ -571,17 +653,26 @@ def get_crypto_news(symbol):
         {
             'title': 'Hedera Announces Major Enterprise Partnership',
             'summary': 'A Fortune 500 company joins the Hedera Governing Council, bringing enterprise validation',
-            'url': 'https://example.com/hedera-partnership'
+            'url': 'https://example.com/hedera-partnership',
+            'type': 'current'
         },
         {
             'title': 'HBAR Foundation Funds New DeFi Projects',
             'summary': 'New grants announced to develop decentralized finance applications on the Hedera network',
-            'url': 'https://example.com/hbar-defi-grants'
+            'url': 'https://example.com/hbar-defi-grants',
+            'type': 'current'
         },
         {
-            'title': 'Hedera Sets New TPS Record in Recent Test',
-            'summary': 'Network optimization leads to new transaction throughput milestone, highlighting scalability',
-            'url': 'https://example.com/hedera-tps-record'
+            'title': f'Hedera Plans Network Upgrade in the Next {random.randint(1, 4)} Weeks',
+            'summary': 'The planned upgrade aims to enhance transaction throughput and reduce fees further',
+            'url': 'https://example.com/hedera-upgrade',
+            'type': 'upcoming'
+        },
+        {
+            'title': f'Major Hedera-Based dApp Launch Set for {(datetime.datetime.now() + datetime.timedelta(days=random.randint(7, 21))).strftime("%d %B")}',
+            'summary': 'A highly anticipated decentralized application built on Hedera is scheduled to launch soon',
+            'url': 'https://example.com/hedera-dapp-launch',
+            'type': 'upcoming'
         }
     ]
     
