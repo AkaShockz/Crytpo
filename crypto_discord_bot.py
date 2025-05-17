@@ -1,4 +1,5 @@
 import discord
+from discord import app_commands
 from discord.ext import commands, tasks
 import requests
 import os
@@ -25,19 +26,28 @@ technical_terms = {
 }
 
 intents = discord.Intents.default()
-intents.message_content = True
+# No message content intent needed for slash commands
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
 
 @bot.event
 async def on_ready():
     print(f'Logged in as {bot.user}')
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="crypto markets"))
+    
+    # Start background tasks
     market_insights.start()
     technical_analysis.start()
     major_news_alerts.start()
+    
+    # Sync slash commands if not already synced
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        print(f"Failed to sync commands: {e}")
 
-@bot.command(name="help")
-async def help_command(ctx):
+@bot.tree.command(name="help", description="Display the bot's help information")
+async def help_command(interaction: discord.Interaction):
     """Display the bot's help information"""
     embed = discord.Embed(
         title="Crypto Assistant Bot Commands",
@@ -46,49 +56,46 @@ async def help_command(ctx):
     )
     
     embed.add_field(
-        name="!price [coin]",
+        name="/price [coin]",
         value="Get current price of a cryptocurrency (BTC, XRP, or HBAR)",
         inline=False
     )
     
     embed.add_field(
-        name="!analysis [coin]",
+        name="/analysis [coin]",
         value="Get detailed technical analysis of a coin",
         inline=False
     )
     
     embed.add_field(
-        name="!predict [coin]",
+        name="/predict [coin]",
         value="Get price prediction based on current patterns",
         inline=False
     )
     
     embed.add_field(
-        name="!news [coin]",
+        name="/news [coin]",
         value="Get latest news that might impact the coin",
         inline=False
     )
     
     embed.add_field(
-        name="!help",
+        name="/help",
         value="Show this help message",
         inline=False
     )
     
     embed.set_footer(text="The bot also sends automatic alerts for significant market movements")
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-async def price(ctx, symbol: str = None):
-    """Get the current price of a crypto symbol (e.g. !price BTC)"""
-    if not symbol:
-        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
-        return
-        
+@bot.tree.command(name="price", description="Get the current price of a crypto symbol")
+@app_commands.describe(symbol="The cryptocurrency symbol (BTC, XRP, or HBAR)")
+async def price(interaction: discord.Interaction, symbol: str):
+    """Get the current price of a crypto symbol"""        
     symbol = symbol.upper()
     if symbol not in SUPPORTED_COINS:
-        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        await interaction.response.send_message(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
         return
         
     price = get_crypto_price(symbol)
@@ -99,20 +106,17 @@ async def price(ctx, symbol: str = None):
             color=0x00FF00
         )
         embed.set_footer(text=f"Data from Binance • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
     else:
-        await ctx.send(f"Could not fetch price for {symbol}")
+        await interaction.response.send_message(f"Could not fetch price for {symbol}")
 
-@bot.command()
-async def analysis(ctx, symbol: str = None):
-    """Get technical analysis for a cryptocurrency"""
-    if not symbol:
-        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
-        return
-        
+@bot.tree.command(name="analysis", description="Get technical analysis for a cryptocurrency")
+@app_commands.describe(symbol="The cryptocurrency symbol (BTC, XRP, or HBAR)")
+async def analysis(interaction: discord.Interaction, symbol: str):
+    """Get technical analysis for a cryptocurrency"""        
     symbol = symbol.upper()
     if symbol not in SUPPORTED_COINS:
-        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        await interaction.response.send_message(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
         return
     
     # Get simulated technical analysis
@@ -148,18 +152,15 @@ async def analysis(ctx, symbol: str = None):
     
     embed.set_footer(text=f"Analysis based on data from the past 24 hours • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-async def predict(ctx, symbol: str = None):
-    """Get price prediction for a cryptocurrency"""
-    if not symbol:
-        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
-        return
-        
+@bot.tree.command(name="predict", description="Get price prediction for a cryptocurrency")
+@app_commands.describe(symbol="The cryptocurrency symbol (BTC, XRP, or HBAR)")
+async def predict(interaction: discord.Interaction, symbol: str):
+    """Get price prediction for a cryptocurrency"""        
     symbol = symbol.upper()
     if symbol not in SUPPORTED_COINS:
-        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        await interaction.response.send_message(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
         return
     
     # Get simulated prediction data
@@ -197,18 +198,15 @@ async def predict(ctx, symbol: str = None):
     
     embed.set_footer(text="⚠️ This is not financial advice. Always do your own research.")
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
-@bot.command()
-async def news(ctx, symbol: str = None):
-    """Get latest news for a cryptocurrency"""
-    if not symbol:
-        await ctx.send("Please specify a cryptocurrency symbol (BTC, XRP, or HBAR)")
-        return
-        
+@bot.tree.command(name="news", description="Get latest news for a cryptocurrency")
+@app_commands.describe(symbol="The cryptocurrency symbol (BTC, XRP, or HBAR)")
+async def news(interaction: discord.Interaction, symbol: str):
+    """Get latest news for a cryptocurrency"""        
     symbol = symbol.upper()
     if symbol not in SUPPORTED_COINS:
-        await ctx.send(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
+        await interaction.response.send_message(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
         return
     
     # Get simulated news data
@@ -229,7 +227,7 @@ async def news(ctx, symbol: str = None):
     
     embed.set_footer(text=f"News collected from various sources • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    await ctx.send(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 @tasks.loop(minutes=30)
 async def market_insights():
