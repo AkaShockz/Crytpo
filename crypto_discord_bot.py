@@ -11,7 +11,7 @@ intents = discord.Intents.default()
 bot = commands.Bot(command_prefix='!', intents=intents)
 
 @bot.event
-def on_ready():
+async def on_ready():
     print(f'Logged in as {bot.user}')
     crypto_alerts.start()
 
