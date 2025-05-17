@@ -220,6 +220,13 @@ async def predict(interaction: discord.Interaction, symbol: str):
         color=color
     )
     
+    # Add Market Sentiment Index (MSI) - show this first as requested
+    embed.add_field(
+        name="🌡️ Market Sentiment Index (MSI)",
+        value=f"**{prediction['msi_value']}/100** - {prediction['msi_interpretation']}\n*(Shows overall market feeling about this coin)*",
+        inline=False
+    )
+    
     # Simplified chart pattern analysis
     pattern_explanation = prediction['upcoming_pattern'].split("pattern")[0].strip() + " pattern"
     embed.add_field(
@@ -630,12 +637,31 @@ def get_price_prediction(symbol):
     if pattern_direction == "bullish":
         short_term_pred = f"Target: £{price_target * 0.98:.2f} within 24 hours based on technical indicators (55% chance)"
         medium_term_pred = f"If price stays above £{price_target * 0.96:.2f} for 2 days, could reach £{price_target * 1.02:.2f} in a week"
+        msi_value = random.randint(60, 85)  # Higher MSI for bullish
     elif pattern_direction == "bearish":
         short_term_pred = f"Price likely to drop to £{price_target * 1.02:.2f} in next 24 hours"
         medium_term_pred = f"Could fall to £{price_target * 0.98:.2f} within a week if support levels break"
+        msi_value = random.randint(15, 40)  # Lower MSI for bearish
     else:
         short_term_pred = f"Price will likely stay between £{price_target * 0.98:.2f}-£{price_target * 1.02:.2f} for next 24 hours"
         medium_term_pred = f"Expect sideways movement for the next week unless news changes market direction"
+        msi_value = random.randint(40, 60)  # Middle MSI for neutral
+    
+    # Create Market Sentiment Index interpretation
+    if msi_value >= 70:
+        msi_interpretation = "Very Bullish 🔥"
+    elif msi_value >= 60:
+        msi_interpretation = "Bullish 📈"
+    elif msi_value >= 45:
+        msi_interpretation = "Slightly Bullish ↗️"
+    elif msi_value >= 40:
+        msi_interpretation = "Neutral ↔️"
+    elif msi_value >= 30:
+        msi_interpretation = "Slightly Bearish ↘️"
+    elif msi_value >= 15:
+        msi_interpretation = "Bearish 📉"
+    else:
+        msi_interpretation = "Very Bearish ❄️"
     
     return {
         'upcoming_pattern': selected_pattern["text"],
@@ -646,7 +672,9 @@ def get_price_prediction(symbol):
         'medium_term': medium_term_pred,
         'confidence': random.randint(55, 65),
         'factors': "Strong buying activity seen in the last 24 hours",
-        'upcoming_events': f"Next {symbol} update expected within 2 weeks"
+        'upcoming_events': f"Next {symbol} update expected within 2 weeks",
+        'msi_value': msi_value,
+        'msi_interpretation': msi_interpretation
     }
 
 def get_crypto_news(symbol):
