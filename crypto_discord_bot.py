@@ -11,6 +11,8 @@ import aiohttp
 import re
 from datetime import timedelta
 import asyncio
+import threading
+import queue
 
 # --- CONFIG ---
 TOKEN = os.getenv('DISCORD_BOT_TOKEN', 'YOUR_DISCORD_BOT_TOKEN')  # Replace with your bot token or set as env var
@@ -34,10 +36,21 @@ USD_TO_GBP_RATE = 0.78
 
 # High-impact entities that can move markets
 MARKET_MOVERS = [
-    'SEC', 'Biden', 'Trump', 'Powell', 'Federal Reserve', 'Fed', 
-    'BlackRock', 'Fidelity', 'Grayscale', 'Ripple', 'Hedera', 
-    'ETF', 'CBDC', 'regulation', 'lawsuit', 'settlement',
-    'hack', 'security breach', 'Binance', 'Coinbase', 'Kraken',
+    # Priority figures (high impact)
+    'Trump', 'Donald Trump', 'POTUS', 'President Trump',  # Trump statements are high priority
+    
+    # Regulatory entities
+    'SEC', 'CFTC', 'Federal Reserve', 'Fed', 'Biden', 'Powell',
+    
+    # Financial institutions
+    'BlackRock', 'Fidelity', 'Grayscale', 'JPMorgan', 'Goldman Sachs',
+    
+    # Specific crypto entities & insiders
+    'Ripple', 'Brad Garlinghouse', 'Chris Larsen', 'David Schwartz',  # XRP insiders
+    'Hedera', 'HBAR Foundation', 'Mance Harmon', 'Leemon Baird',  # HBAR insiders
+    
+    # Market events
+    'ETF', 'CBDC', 'regulation', 'lawsuit', 'settlement', 'hack', 'security breach',
     'whale', 'liquidation', 'delisting', 'listing', 'partnership'
 ]
 
@@ -50,10 +63,20 @@ NEWS_SOURCES = [
     'https://decrypt.co/'
 ]
 
-# Twitter/X accounts to monitor
+# Twitter/X accounts to monitor - modified to focus on Trump and crypto influencers
 TWITTER_ACCOUNTS = [
+    # High priority
+    'realDonaldTrump', 'DonaldJTrumpJr',  # Trump and family
+    
+    # XRP influencers
+    'bgarlinghouse', 'chrislarsensf', 'JoelKatz',  # XRP insiders
+    
+    # HBAR influencers
+    'manceharmon', 'leemonbaird',  # HBAR insiders 
+    
+    # Other major crypto influencers
     'elonmusk', 'saylor', 'cz_binance', 'VitalikButerin', 'brian_armstrong',
-    'haydenzadams', 'APompliano', 'SBF_FTX', 'tyler', 'garyvee'
+    'APompliano', 'tyler', 'garyvee'
 ]
 
 # Market state dictionary to ensure consistent predictions across all bot functions
@@ -667,7 +690,7 @@ async def major_news_alerts():
         
         await channel.send("@here", embed=embed)
 
-@tasks.loop(seconds=180)
+@tasks.loop(seconds=90)  # Scan more frequently (every 90 seconds)
 async def monitor_breaking_news():
     """Monitor for breaking news that could impact crypto prices and send immediate alerts"""
     channel = bot.get_channel(CHANNEL_ID)
@@ -680,39 +703,65 @@ async def monitor_breaking_news():
         breaking_news = await scan_for_breaking_news()
         
         if breaking_news:
+            # Set color based on sentiment
+            if breaking_news['sentiment'] > 0.2:
+                color = 0x00FF00  # Green for positive
+                market_impact = "POSITIVE FOR MARKET 📈"
+            elif breaking_news['sentiment'] < -0.2:
+                color = 0xFF0000  # Red for negative
+                market_impact = "NEGATIVE FOR MARKET 📉"
+            else:
+                color = 0xFFAA00  # Amber for neutral/mixed
+                market_impact = "MIXED IMPACT ON MARKET ↔️"
+            
             # Format as urgent alert with impact assessment
             embed = discord.Embed(
-                title=f"🚨 URGENT MARKET ALERT: {breaking_news['title']}",
+                title=f"🚨 {market_impact}: {breaking_news['title']}",
                 description=breaking_news['summary'],
-                color=0xFF0000  # Red for urgency
+                color=color
             )
             
-            # Add potential price impact analysis
+            # Add specific crypto impact analysis
+            positive_coins = breaking_news.get('positive_impact_coins', [])
+            negative_coins = breaking_news.get('negative_impact_coins', [])
+            
+            if positive_coins:
+                embed.add_field(
+                    name="🟢 POTENTIALLY BULLISH FOR:",
+                    value=", ".join(positive_coins) + "\n" + breaking_news.get('positive_reason', ''),
+                    inline=False
+                )
+                
+            if negative_coins:
+                embed.add_field(
+                    name="🔴 POTENTIALLY BEARISH FOR:",
+                    value=", ".join(negative_coins) + "\n" + breaking_news.get('negative_reason', ''),
+                    inline=False
+                )
+            
+            # Add detailed market impact analysis
             embed.add_field(
                 name="Potential Market Impact",
                 value=breaking_news['impact_analysis'],
                 inline=False
             )
             
-            # Add affected coins
-            embed.add_field(
-                name="Potentially Affected Coins",
-                value=", ".join(breaking_news['affected_coins']),
-                inline=False
-            )
-            
-            # Add source with timestamp
+            # Add source information with extra visibility if it's from Trump
+            source_info = f"[{breaking_news['source_name']}]({breaking_news['source_url']})"
+            if any(trump_term in breaking_news['title'].lower() for trump_term in ['trump', 'potus', 'president']):
+                source_info = f"⚠️ **TRUMP STATEMENT** ⚠️\n{source_info}"
+                
             embed.add_field(
                 name="Source",
-                value=f"[{breaking_news['source_name']}]({breaking_news['source_url']})",
+                value=source_info,
                 inline=False
             )
             
             # Add advice on what to do now
             if breaking_news['sentiment'] > 0.2:
-                action_advice = "Consider taking advantage of potential upward price movement."
+                action_advice = "Consider taking advantage of potential upward price movement for affected coins."
             elif breaking_news['sentiment'] < -0.2:
-                action_advice = "Consider protecting your position to minimize potential losses."
+                action_advice = "Consider protecting your position in affected coins to minimize potential losses."
             else:
                 action_advice = "Monitor the situation closely as market impact is still developing."
                 
@@ -747,16 +796,13 @@ async def scan_for_breaking_news():
         # Check crypto news websites
         for source_url in NEWS_SOURCES:
             # Avoid checking same source too frequently
-            if source_url in last_checked and now - last_checked[source_url] < timedelta(minutes=10):
+            if source_url in last_checked and now - last_checked[source_url] < timedelta(minutes=5):  # Reduced to 5 minutes
                 continue
                 
             try:
                 async with session.get(source_url, timeout=10) as response:
                     if response.status == 200:
                         html_content = await response.text()
-                        
-                        # Very basic scraping - would need more sophisticated parsing in production
-                        # For each news site, you'd ideally have specific parsing rules
                         
                         # Look for headlines with market-moving keywords
                         for entity in MARKET_MOVERS:
@@ -780,16 +826,9 @@ async def scan_for_breaking_news():
                                     # Try to find the actual article URL that contains this headline
                                     article_url = find_article_url(html_content, clean_headline, source_url)
                                     
-                                    # Analyze headline for coins and sentiment
-                                    affected_coins = []
-                                    for coin in SUPPORTED_COINS:
-                                        if coin in clean_headline or coin.lower() in clean_headline:
-                                            affected_coins.append(coin)
+                                    # Analyze headline for affected coins and determine impact (positive/negative)
+                                    affected_coins_analysis = analyze_crypto_impact(clean_headline, entity)
                                     
-                                    # If no specific coins mentioned, it might affect the whole market
-                                    if not affected_coins:
-                                        affected_coins = SUPPORTED_COINS
-                                        
                                     # Very basic sentiment analysis (would use more sophisticated NLP in production)
                                     sentiment_score = calculate_news_sentiment(clean_headline)
                                     sentiment_text = get_sentiment_text(sentiment_score)
@@ -797,20 +836,33 @@ async def scan_for_breaking_news():
                                     # Generate impact analysis based on the headline and sentiment
                                     impact_analysis = generate_impact_analysis(clean_headline, entity, sentiment_score)
                                     
+                                    # Determine if this is Trump-related for higher visibility
+                                    is_trump_related = any(trump_term.lower() in clean_headline.lower() 
+                                                          for trump_term in ['trump', 'potus', 'president trump'])
+                                    
                                     # Build the news object
                                     breaking_news = {
                                         'title': clean_headline,
                                         'summary': f"Breaking news related to {entity.upper()} that could impact crypto markets.",
                                         'impact_analysis': impact_analysis,
-                                        'affected_coins': affected_coins,
+                                        'affected_coins': affected_coins_analysis['all_affected'],
+                                        'positive_impact_coins': affected_coins_analysis['positive_impact'],
+                                        'negative_impact_coins': affected_coins_analysis['negative_impact'],
+                                        'positive_reason': affected_coins_analysis['positive_reason'],
+                                        'negative_reason': affected_coins_analysis['negative_reason'],
                                         'source_name': source_url.split('//')[1].split('/')[0],
-                                        'source_url': article_url,  # Use the specific article URL
+                                        'source_url': article_url,
                                         'sentiment': sentiment_score,
-                                        'sentiment_text': sentiment_text
+                                        'sentiment_text': sentiment_text,
+                                        'is_trump_related': is_trump_related
                                     }
                                     
                                     # Record that we've checked this source
                                     last_checked[source_url] = now
+                                    
+                                    # If it's Trump-related, give it higher priority
+                                    if is_trump_related:
+                                        return breaking_news
                                     
                                     return breaking_news
                         
@@ -824,6 +876,123 @@ async def scan_for_breaking_news():
         
         # No breaking news found
         return None
+
+def analyze_crypto_impact(headline, mentioned_entity):
+    """Analyze which cryptocurrencies will be positively or negatively impacted by the news"""
+    headline_lower = headline.lower()
+    result = {
+        'all_affected': [],
+        'positive_impact': [],
+        'negative_impact': [],
+        'positive_reason': '',
+        'negative_reason': ''
+    }
+    
+    # Check for mentions of specific cryptocurrencies
+    crypto_keywords = {
+        'BTC': ['bitcoin', 'btc', 'satoshi'],
+        'XRP': ['xrp', 'ripple', 'garlinghouse', 'larsen', 'schwartz'],
+        'HBAR': ['hbar', 'hedera', 'hashgraph', 'mance', 'leemon', 'baird']
+    }
+    
+    # Find which cryptos are explicitly mentioned
+    mentioned_cryptos = []
+    for crypto, keywords in crypto_keywords.items():
+        if any(keyword in headline_lower for keyword in keywords):
+            mentioned_cryptos.append(crypto)
+            result['all_affected'].append(crypto)
+    
+    # If no specific crypto mentioned, analyze based on the entity
+    if not mentioned_cryptos:
+        # Use our supported coins as default
+        result['all_affected'] = SUPPORTED_COINS
+    
+    # Analyze sentiment specifically for Trump statements
+    if any(trump_term.lower() in headline_lower for trump_term in ['trump', 'donald']):
+        if any(pos_term in headline_lower for pos_term in ['support', 'endorse', 'buy', 'positive', 'good']):
+            # Trump positive about crypto
+            result['positive_impact'] = result['all_affected']
+            result['positive_reason'] = "Trump's positive statements typically cause short-term price increases"
+        elif any(neg_term in headline_lower for neg_term in ['ban', 'regulate', 'against', 'negative', 'bad']):
+            # Trump negative about crypto
+            result['negative_impact'] = result['all_affected']
+            result['negative_reason'] = "Trump's negative statements can cause market uncertainty"
+        else:
+            # Neutral or ambiguous Trump statement - typically seen as positive for crypto
+            result['positive_impact'] = result['all_affected']
+            result['positive_reason'] = "Trump's attention to crypto often drives retail interest"
+    
+    # Analyze sentiment for SEC/regulatory news
+    elif any(reg_term.lower() in headline_lower for reg_term in ['sec', 'regulatory', 'regulation', 'lawsuit']):
+        # XRP specific analysis
+        if 'XRP' in result['all_affected'] or any(xrp_term in headline_lower for xrp_term in ['xrp', 'ripple']):
+            if any(pos_term in headline_lower for pos_term in ['win', 'victory', 'settle', 'clarity']):
+                result['positive_impact'].append('XRP')
+                result['positive_reason'] = "Positive regulatory developments specifically benefit XRP given its SEC case history"
+            elif any(neg_term in headline_lower for neg_term in ['lose', 'against', 'violation']):
+                result['negative_impact'].append('XRP')
+                result['negative_reason'] = "Adverse SEC rulings could particularly impact XRP price"
+        
+        # General crypto regulation impact
+        if any(pos_term in headline_lower for pos_term in ['clarity', 'framework', 'approve', 'support']):
+            for coin in result['all_affected']:
+                if coin not in result['positive_impact'] and coin not in result['negative_impact']:
+                    result['positive_impact'].append(coin)
+            if not result['positive_reason']:
+                result['positive_reason'] = "Regulatory clarity generally benefits the entire crypto market"
+        elif any(neg_term in headline_lower for neg_term in ['crackdown', 'ban', 'against', 'strict']):
+            for coin in result['all_affected']:
+                if coin not in result['positive_impact'] and coin not in result['negative_impact']:
+                    result['negative_impact'].append(coin)
+            if not result['negative_reason']:
+                result['negative_reason'] = "Stricter regulations can create selling pressure across crypto markets"
+    
+    # Analyze ETF-related news
+    elif 'etf' in headline_lower:
+        if 'BTC' in result['all_affected'] or 'bitcoin' in headline_lower:
+            if any(pos_term in headline_lower for pos_term in ['approve', 'launch', 'success']):
+                result['positive_impact'].append('BTC')
+                # ETF approvals generally help the whole market
+                for coin in result['all_affected']:
+                    if coin not in result['positive_impact']:
+                        result['positive_impact'].append(coin)
+                result['positive_reason'] = "ETF approvals typically boost Bitcoin directly and lift the broader market"
+            elif any(neg_term in headline_lower for neg_term in ['reject', 'delay', 'concerns']):
+                result['negative_impact'].append('BTC')
+                # ETF rejections hurt the whole market
+                for coin in result['all_affected']:
+                    if coin not in result['negative_impact']:
+                        result['negative_impact'].append(coin)
+                result['negative_reason'] = "ETF setbacks create uncertainty that affects the entire crypto market"
+    
+    # HBAR-specific news
+    elif any(hbar_term.lower() in headline_lower for hbar_term in ['hbar', 'hedera', 'hashgraph']):
+        if any(pos_term in headline_lower for pos_term in ['partner', 'adoption', 'launch', 'milestone']):
+            result['positive_impact'].append('HBAR')
+            result['positive_reason'] = "Enterprise adoption and partnerships are particularly beneficial for HBAR's use case"
+        elif any(neg_term in headline_lower for neg_term in ['issue', 'problem', 'delay', 'concern']):
+            result['negative_impact'].append('HBAR')
+            result['negative_reason'] = "Technical challenges or adoption delays can impact HBAR price expectations"
+    
+    # General positive/negative sentiment analysis for others
+    else:
+        positive_terms = ['bullish', 'rally', 'surge', 'adoption', 'institutional', 'invest', 'buy']
+        negative_terms = ['bearish', 'crash', 'drop', 'sell', 'dump', 'ban', 'restrict']
+        
+        if any(pos in headline_lower for pos in positive_terms):
+            result['positive_impact'] = result['all_affected']
+            result['positive_reason'] = "Positive market sentiment can drive buying interest"
+        
+        if any(neg in headline_lower for neg in negative_terms):
+            result['negative_impact'] = result['all_affected']
+            result['negative_reason'] = "Negative market news can trigger selling pressure"
+    
+    # Remove duplicates
+    result['all_affected'] = list(set(result['all_affected']))
+    result['positive_impact'] = list(set(result['positive_impact']))
+    result['negative_impact'] = list(set(result['negative_impact']))
+    
+    return result
 
 def find_article_url(html_content, headline, source_base_url):
     """Find the actual article URL from the content based on headline match"""
