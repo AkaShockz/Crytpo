@@ -25,6 +25,9 @@ technical_terms = {
     'FIBO': 'Fibonacci Retracement'
 }
 
+# Default USD to GBP conversion rate as fallback
+USD_TO_GBP_RATE = 0.78
+
 intents = discord.Intents.default()
 # No message content intent needed for slash commands
 bot = commands.Bot(command_prefix='!', intents=intents, help_command=None)
@@ -98,11 +101,13 @@ async def price(interaction: discord.Interaction, symbol: str):
         await interaction.response.send_message(f"I only support these coins: {', '.join(SUPPORTED_COINS)}")
         return
         
-    price = get_crypto_price(symbol)
-    if price:
+    usd_price = get_crypto_price(symbol)
+    if usd_price:
+        # Convert to GBP
+        gbp_price = convert_usd_to_gbp(float(usd_price))
         embed = discord.Embed(
             title=f"{symbol} Price",
-            description=f"The current price of {symbol} is ${price}",
+            description=f"The current price of {symbol} is £{gbp_price:.2f}",
             color=0x00FF00
         )
         embed.set_footer(text=f"Data from Binance • {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -146,7 +151,7 @@ async def analysis(interaction: discord.Interaction, symbol: str):
     # Add support and resistance
     embed.add_field(
         name="Support & Resistance",
-        value=f"Support: ${analysis_data['support']}\nResistance: ${analysis_data['resistance']}",
+        value=f"Support: £{analysis_data['support']:.2f}\nResistance: £{analysis_data['resistance']:.2f}",
         inline=False
     )
     
@@ -248,8 +253,8 @@ async def market_insights():
     
     for coin, data in overview.items():
         embed.add_field(
-            name=f"{coin} (${data['price']})",
-            value=f"24h Change: {data['change_24h']}%\nVolume: ${data['volume']}\nMarket Sentiment: {data['sentiment']}",
+            name=f"{coin} (£{data['price']:.2f})",
+            value=f"24h Change: {data['change_24h']}%\nVolume: £{data['volume']}\nMarket Sentiment: {data['sentiment']}",
             inline=False
         )
     
@@ -287,7 +292,7 @@ async def technical_analysis():
     # Support and resistance
     embed.add_field(
         name="Key Levels",
-        value=f"Support: ${analysis_data['support']}\nResistance: ${analysis_data['resistance']}",
+        value=f"Support: £{analysis_data['support']:.2f}\nResistance: £{analysis_data['resistance']:.2f}",
         inline=False
     )
     
@@ -350,7 +355,7 @@ async def major_news_alerts():
         await channel.send("@here", embed=embed)
 
 def get_crypto_price(symbol):
-    """Get current price for a cryptocurrency"""
+    """Get current price for a cryptocurrency in USD"""
     try:
         url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT"
         r = requests.get(url)
@@ -359,10 +364,25 @@ def get_crypto_price(symbol):
         print(f"Error fetching price: {e}")
         return None
 
+def convert_usd_to_gbp(usd_amount):
+    """Convert USD to GBP using current exchange rate"""
+    try:
+        # Try to get current exchange rate
+        url = "https://api.exchangerate-api.com/v4/latest/USD"
+        response = requests.get(url)
+        data = response.json()
+        gbp_rate = data["rates"]["GBP"]
+        return usd_amount * gbp_rate
+    except Exception as e:
+        print(f"Error fetching exchange rate: {e}")
+        # Fall back to default rate
+        return usd_amount * USD_TO_GBP_RATE
+
 def get_technical_analysis(symbol):
     """Simulate technical analysis for a cryptocurrency"""
     # In a real implementation, this would use actual market data and technical indicators
-    price = float(get_crypto_price(symbol) or 0)
+    usd_price = float(get_crypto_price(symbol) or 0)
+    gbp_price = convert_usd_to_gbp(usd_price)
     
     # For simulation purposes
     sentiments = ["Bullish", "Slightly Bullish", "Neutral", "Slightly Bearish", "Bearish"]
@@ -399,8 +419,8 @@ def get_technical_analysis(symbol):
             'EMA 50/200': 'Golden Cross' if random.random() > 0.7 else 'Death Cross' if random.random() < 0.3 else 'Neutral'
         },
         'pattern': random.choice(patterns),
-        'support': round(price * 0.95, 2),
-        'resistance': round(price * 1.05, 2),
+        'support': round(gbp_price * 0.95, 2),
+        'resistance': round(gbp_price * 1.05, 2),
         'volume': random.choice(volume_analysis),
         'recommendation': random.choice(recommendations)
     }
@@ -408,16 +428,18 @@ def get_technical_analysis(symbol):
 def get_price_prediction(symbol):
     """Simulate price prediction for a cryptocurrency"""
     # In a real implementation, this would use ML models/historical data analysis
+    usd_price = float(get_crypto_price(symbol) or 0)
+    gbp_price = convert_usd_to_gbp(usd_price)
     
     short_term_predictions = [
-        f"Likely to test resistance at ${float(get_crypto_price(symbol) or 0) * 1.05:.2f} in the next 24 hours",
-        f"Expected to consolidate between ${float(get_crypto_price(symbol) or 0) * 0.98:.2f} - ${float(get_crypto_price(symbol) or 0) * 1.02:.2f}",
-        f"Possible breakout above ${float(get_crypto_price(symbol) or 0) * 1.03:.2f} if volume increases"
+        f"Likely to test resistance at £{gbp_price * 1.05:.2f} in the next 24 hours",
+        f"Expected to consolidate between £{gbp_price * 0.98:.2f} - £{gbp_price * 1.02:.2f}",
+        f"Possible breakout above £{gbp_price * 1.03:.2f} if volume increases"
     ]
     
     medium_term_predictions = [
-        f"Forming a bullish pattern suggesting a target of ${float(get_crypto_price(symbol) or 0) * 1.15:.2f} within a week",
-        f"Indicators suggest continued sideways movement with resistance at ${float(get_crypto_price(symbol) or 0) * 1.08:.2f}",
+        f"Forming a bullish pattern suggesting a target of £{gbp_price * 1.15:.2f} within a week",
+        f"Indicators suggest continued sideways movement with resistance at £{gbp_price * 1.08:.2f}",
         f"Technical patterns indicate potential upside of 10-15% if market conditions remain favorable"
     ]
     
@@ -509,9 +531,10 @@ def get_market_overview():
     
     overview = {}
     for coin in SUPPORTED_COINS:
-        price = float(get_crypto_price(coin) or 0)
+        usd_price = float(get_crypto_price(coin) or 0)
+        gbp_price = convert_usd_to_gbp(usd_price)
         overview[coin] = {
-            'price': price,
+            'price': gbp_price,
             'change_24h': round(random.uniform(-5, 7), 2),
             'volume': f"{round(random.uniform(100, 500), 1)}M",
             'sentiment': "Bullish" if random.random() > 0.6 else "Neutral" if random.random() > 0.3 else "Bearish"
